@@ -1,20 +1,79 @@
-# Demo
-https://youtu.be/VJdt-vAZbLo
+# SillyTavern Multiplayer
 
-This is an unofficial extension for SillyTavern that adds multiplayer.
+Unofficial extension that adds multiplayer to [SillyTavern](https://github.com/SillyTavern/SillyTavern). Let your friends join your RP sessions through a browser - they see the chat, send messages as their characters, and interact with the AI together in real time.
 
-The way it works is as follows:
-- There is an extension that the host has to install into their SillyTavern instance
-- This extension communicates with a server, sending it the chat history as well as reading out any queued messages
-- The server has a front-end where you can see the chat history and send messages, sent messages get queued up and are read out by the extension
+Based on [LiamDobbelaere/sillytavern-mp](https://github.com/LiamDobbelaere/sillytavern-mp).
 
-This is for advanced use and requires you to expose the server to the internet (your SillyTavern instance can keep running locally), so that your friends can hop on the front-end and send messages.
+## What's different in this fork
 
-# Setup
-- Host the server (which is a Nodejs application) somewhere and tell your friends to open it in their browser, this is how they will read the chat history and send messages
-- You must configure the extension to point to the server's address, where it says `const targetUrl = 'http://localhost:3000/';` in `silly-tavern-mp-extension/index.js`
-- Run your SillyTavern instance with the extension installed
-- Have fun, it's recommended to send messages yourself via the server front-end and not from within SillyTavern, as the extension will queue-up any messages sent from the server
+- **WebSocket** - instant message delivery instead of HTTP polling, near-zero latency
+- **Swipes** - navigate between alternative AI responses from the web client
+- **Regenerate** - Ctrl+Enter to regenerate the last AI response
+- **Edit messages** - click ✎ on any message to edit it inline
+- **Online presence** - see who's connected in real time
+- **Typing indicators** - see when someone is typing
+- **Visual feedback** - toast notifications for swipes, regeneration, edits
+- **Markdown rendering** - proper formatting with bold, italic, dialogue highlighting
+- **Persistent name** - character name saves across page refreshes
 
-# How does it work?
-It mimics user actions, choosing a different persona automatically for each person that sends a message. It will type the message in the box, send it and trigger an AI generation. Feel free to customize it to your liking.
+## How it works
+
+1. The **ST extension** runs inside SillyTavern on the host's machine
+2. The **server** relays chat history and commands between ST and web clients via WebSocket
+3. The **web client** is a lightweight frontend where players read the chat and send messages
+
+When a player sends a message, the extension mimics user actions — it selects the matching persona, types the message, and triggers AI generation.
+
+## Setup
+
+### 1. Install the extension
+
+Copy the extension folder into your SillyTavern extensions directory:
+```
+SillyTavern/data/default-user/extensions/
+```
+Make sure `index.js` and `manifest.json` are in the root of the extension folder.
+
+### 2. Start the server
+
+```bash
+cd server
+npm install
+node index.js
+```
+Or just double-click `start.bat`.
+
+The server runs on port 3000 by default.
+
+### 3. Configure
+
+If the server runs on a different machine, update `const TARGET_URL` in the extension's `index.js`:
+```js
+const TARGET_URL = 'http://your-server-address:3000';
+```
+
+### 4. Connect
+
+- Open `http://localhost:3000` (or your server's address) in a browser
+- Enter your character name
+- Start sending messages
+
+## Exposing to the internet
+
+For friends to connect remotely, you need to expose the server. Options:
+- **Port forwarding** — forward port 3000 on your router
+- **Cloudflare Tunnel** / **ngrok** — no port forwarding needed
+- **VPS** — host the server on a cheap VPS
+
+Your SillyTavern instance stays local — only the server needs to be reachable.
+
+## Controls
+
+| Action | Shortcut |
+|---|---|
+| Send message | Enter |
+| Regenerate | Ctrl+Enter |
+| Swipe left/right | ◂ ▸ buttons on last AI message |
+| Edit message | ✎ button (hover over message) |
+| Save edit | Ctrl+Enter in edit mode |
+| Cancel edit | Escape |

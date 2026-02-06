@@ -139,19 +139,28 @@ function handleSwipe(direction) {
 
 function handleRegenerate() {
   console.log('[MP] Regenerating');
+
+  // Try clicking regenerate button directly (it may be hidden in a menu)
   const selectors = ['#option_regenerate', '.option_regenerate', '#regenerate_but', '.regenerate_but'];
   for (const sel of selectors) {
     const btn = $(sel);
-    if (btn.length && btn.is(':visible')) {
-      btn.trigger('click');
+    if (btn.length) {
+      btn[0].click();
       console.log('[MP] Regen via:', sel);
       setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 3000);
       return;
     }
   }
-  // Fallback: swipe right
-  console.log('[MP] No regen button, using swipe right');
-  handleSwipe('right');
+
+  // Fallback: trigger generate with 'regenerate' type via ST API
+  console.log('[MP] No regen button, using generate API');
+  try {
+    getContext().generate('regenerate');
+    setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 3000);
+  } catch (e) {
+    console.warn('[MP] generate() fallback failed:', e);
+    handleSwipe('right');
+  }
 }
 
 // ──────────── Edit ────────────

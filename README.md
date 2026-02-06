@@ -37,13 +37,10 @@ Make sure `index.js` and `manifest.json` are in the root of the extension folder
 ### 2. Move folders
 
 Move or copy the silly-tavern-mp-extension and server folders into your root extension folder mentioned above so that the structure looks like this:
-```extensions/
+```
+extensions/
   silly-tavern-mp-extension/
-    index.js
-    manifest.json
   server/
-    index.js
-    package.json
 ```
 
 ### 3. Start the server

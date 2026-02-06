@@ -61,6 +61,7 @@ const TARGET_URL = 'http://your-server-address:3000';
 ## Exposing to the internet
 
 For friends to connect remotely, you need to expose the server. Options:
+- **Radmin VPN / Hamachi** — create a virtual LAN, friends connect to your local IP within the network. Easiest option, no configuration needed
 - **Port forwarding** — forward port 3000 on your router
 - **Cloudflare Tunnel** / **ngrok** — no port forwarding needed
 - **VPS** — host the server on a cheap VPS

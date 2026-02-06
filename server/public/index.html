@@ -1,187 +1,619 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SillyTavern Client</title>
-    <style>
-        body {
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
-            font-family: sans-serif;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SillyTavern MP Client</title>
+  <style>
+    :root {
+      --bg-0: #0f0f11;
+      --bg-1: #18181b;
+      --bg-2: #1f1f25;
+      --bg-3: #111318;
+      --bot-grad-from: #27272a;
+      --bot-grad-to: #3f3f46;
+      --user-grad-from: #2563eb;
+      --user-grad-to: #1d4ed8;
+      --user-ghost-opacity: 0.55;
+      --text-primary: #e4e4e7;
+      --text-dim: #a1a1aa;
+      --text-muted: #71717a;
+      --text-accent: #93c5fd;
+      --text-title: #f8fafc;
+      --border: #2a2a31;
+      --border-hover: #3f3f46;
+      --blue: #3b82f6;
+      --blue-dim: rgba(59,130,246,0.15);
+      --blue-glow: rgba(59,130,246,0.3);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 10px rgba(0,0,0,0.4);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%; margin: 0;
+      font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg-0);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+    body { display: flex; flex-direction: column; align-items: center; }
 
-        #chat {
-            display: flex;
-            flex-direction: column;
-            max-height: calc(100vh - 128px); /* Limit the height to 80% of the viewport */
-            overflow-y: auto; /* Enable vertical scrolling if content overflows */
-        }
+    /* ═══════ ONLINE BAR ═══════ */
+    #online-bar {
+      width: 100%; max-width: 700px;
+      background: var(--bg-2);
+      padding: 8px 18px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--text-muted);
+      border-bottom: 1px solid #1e1e24;
+      flex-shrink: 0;
+    }
+    .dot-online {
+      width: 7px; height: 7px;
+      background: #22c55e; border-radius: 50%;
+      box-shadow: 0 0 6px rgba(34,197,94,0.4);
+      flex-shrink: 0;
+    }
+    .dot-offline {
+      width: 7px; height: 7px;
+      background: #ef4444; border-radius: 50%;
+      box-shadow: 0 0 6px rgba(239,68,68,0.3);
+      flex-shrink: 0;
+    }
+    .user-tag {
+      background: rgba(147,197,253,0.08);
+      padding: 1px 8px; border-radius: 4px;
+      font-size: 12px; color: var(--text-accent);
+      border: 1px solid rgba(147,197,253,0.12);
+    }
 
-        #chat .message {
-            background: linear-gradient(135deg, #f0f0f0, #e0e0e0);
-            border-radius: 15px;
-            padding: 10px 15px;
-            margin: 5px 0;
-            max-width: 80%;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-        }
+    /* ═══════ CHAT ═══════ */
+    #chat {
+      width: 100%; max-width: 700px;
+      flex: 1 1 auto;
+      display: flex; flex-direction: column; gap: 14px;
+      padding: 16px 18px 150px;
+      overflow-y: auto;
+      background: var(--bg-1);
+    }
+    #chat::-webkit-scrollbar { width: 6px; }
+    #chat::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+    #chat::-webkit-scrollbar-track { background: transparent; }
 
-        #chat .message .title {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
+    .message { display: flex; gap: 12px; max-width: 100%; position: relative; }
 
+    /* ═══════ AVATAR ═══════ */
+    .avatar {
+      flex: 0 0 44px; width: 44px; height: 44px;
+      border-radius: var(--radius-sm); overflow: hidden;
+      box-shadow: var(--shadow); background: var(--bg-3);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 16px;
+      color: var(--text-accent); text-transform: uppercase;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-        #chat .message.user {
-            background: linear-gradient(135deg, #d1e7ff, #a8d8ff);
-            align-self: flex-end;
-        }
+    /* ═══════ BUBBLE ═══════ */
+    .bubble-wrap {
+      display: flex; flex-direction: column;
+      max-width: 82%; min-width: 0; flex: 1;
+    }
+    .bubble-wrap:has(.edit-overlay) { max-width: 100%; }
+    .message:has(.edit-overlay) { max-width: 100%; }
 
-        #chat .message.bot {
-            background: linear-gradient(135deg, #f9f9f9, #eaeaea);
-            align-self: flex-start;
-        }
+    .bubble {
+      padding: 10px 14px; border-radius: var(--radius);
+      box-shadow: var(--shadow); line-height: 1.55;
+      word-wrap: break-word; position: relative;
+    }
+    .message.bot .bubble { background: linear-gradient(135deg, var(--bot-grad-from), var(--bot-grad-to)); }
+    .message.user .bubble { background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-to)); color: var(--text-title); }
+    .message.user.ghost .bubble { opacity: var(--user-ghost-opacity); }
+    .msg-title { font-weight: 600; margin-bottom: 4px; font-size: 14px; color: var(--text-accent); }
 
-        #chat .message.user.ghost {
-            opacity: 0.5;
-        }
+    /* ═══════ HOVER ACTIONS ═══════ */
+    .msg-actions { position: absolute; top: 6px; right: 6px; display: none; gap: 3px; z-index: 2; }
+    .message:hover .msg-actions { display: flex; }
+    .action-btn {
+      background: rgba(0,0,0,0.65); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); color: var(--text-dim);
+      width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; transition: all 0.15s; padding: 0;
+    }
+    .action-btn:hover { background: var(--blue-glow); color: var(--text-accent); border-color: var(--blue); }
 
-        #chat-input {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            margin-left: auto;
-            margin-right: auto;
-            max-width: 700px;
-            background-color: #ffffff;
-            padding: 10px;
-            margin-bottom: 32px;
-            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
-        }
+    /* ═══════ EDIT MODE ═══════ */
+    .edit-overlay { margin-top: 8px; }
+    .edit-textarea {
+      width: 100%; min-height: 100px;
+      background: var(--bg-3); border: 1px solid var(--blue);
+      border-radius: var(--radius-sm); color: var(--text-primary);
+      font-family: inherit; font-size: 14px; line-height: 1.55;
+      padding: 10px 12px; resize: vertical; outline: none;
+      box-shadow: 0 0 0 3px var(--blue-dim);
+    }
+    .edit-bar { display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end; }
+    .edit-bar button {
+      padding: 5px 16px; border-radius: 6px; border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+    }
+    .btn-save { background: var(--blue); color: white; }
+    .btn-save:hover { background: #2563eb; }
+    .btn-cancel { background: var(--border-hover); color: var(--text-dim); }
+    .btn-cancel:hover { background: #52525b; }
 
-        #chat-input input {
-            width: calc(100% - 20px);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            font-size: 16px;
-        }
+    /* ═══════ SWIPE CONTROLS ═══════ */
+    .swipe-bar { display: flex; align-items: center; gap: 2px; margin-top: 6px; margin-left: 2px; }
+    .swipe-btn {
+      background: none; border: none; color: var(--text-muted);
+      width: 28px; height: 24px; border-radius: 5px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; transition: all 0.15s; padding: 0;
+    }
+    .swipe-btn:hover { background: var(--blue-dim); color: var(--text-accent); }
+    .swipe-btn:disabled { opacity: 0.25; cursor: default; }
+    .swipe-btn:disabled:hover { background: none; color: var(--text-muted); }
+    .swipe-counter { font-size: 11px; color: var(--text-muted); min-width: 32px; text-align: center; font-variant-numeric: tabular-nums; }
 
-        #chat-input input:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
-        }
+    /* ═══════ ST-LIKE TEXT ═══════ */
+    .mes-text p { margin: 0 0 0.55em; }
+    .mes-text p:last-child { margin-bottom: 0; }
+    .mes-text em { font-style: italic; }
+    .mes-text strong { font-weight: 700; }
+    .mes-text q { color: #e0cf8f; font-style: normal; quotes: none; }
+    .message.user .mes-text q { color: #fde68a; }
+    .mes-text hr { border: none; border-top: 1px solid var(--border-hover); margin: 10px 0; }
+    .mes-text blockquote { border-left: 3px solid var(--blue); margin: 6px 0; padding: 4px 12px; color: var(--text-dim); }
+    .mes-text code { background: rgba(0,0,0,0.3); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
+    .mes-text pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: var(--radius-sm); overflow-x: auto; }
+    .mes-text pre code { background: none; padding: 0; }
 
-        #character-name {
-            position: absolute;
-            right: 100%;
-            top: 0;
-            width: 300px;
-            background-color: #eee;
-            padding: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-    </style>
+    /* ═══════ TYPING INDICATOR ═══════ */
+    #typing-indicator {
+      padding: 0 18px 2px; font-size: 13px;
+      color: var(--text-muted); font-style: italic;
+      height: 18px; max-width: 700px; width: 100%; flex-shrink: 0;
+    }
+    #typing-indicator:empty { height: 0; padding: 0; }
+
+    /* ═══════ TOAST ═══════ */
+    #toast-container {
+      position: fixed; top: 56px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 100; display: flex; flex-direction: column;
+      gap: 6px; align-items: center; pointer-events: none;
+    }
+    .toast {
+      background: rgba(30,30,36,0.92); backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      color: var(--text-dim); font-size: 13px;
+      padding: 6px 16px; border-radius: 8px;
+      display: flex; align-items: center; gap: 8px;
+      animation: toastIn 0.2s ease-out;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .toast.fade-out { animation: toastOut 0.3s ease-in forwards; }
+    .toast .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border-hover);
+      border-top-color: var(--text-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-8px); } }
+
+    /* ═══════ INPUT ═══════ */
+    #chat-input {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      margin: 0 auto; max-width: 700px;
+      background: var(--bg-2);
+      padding: 12px 16px 16px;
+      box-shadow: 0 -4px 14px rgba(0,0,0,0.5);
+      display: flex; gap: 12px; flex-wrap: wrap;
+    }
+    #message {
+      flex: 1 1 auto; padding: 11px 14px;
+      background: var(--bg-3); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text-primary);
+      font-size: 15px; transition: border 0.15s; outline: none;
+    }
+    #message:focus { border-color: var(--blue); }
+    #character-name { display: flex; flex-direction: column; gap: 4px; width: 200px; }
+    #character-name label { font-size: 12px; color: var(--text-muted); }
+    #name {
+      padding: 9px 12px; background: var(--bg-3);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      color: var(--text-primary); font-size: 14px; outline: none;
+    }
+    #name:focus { border-color: var(--blue); }
+    .input-hint { width: 100%; font-size: 11px; color: #3f3f46; text-align: right; margin-top: -4px; }
+
+    @media (max-width: 560px) {
+      #chat-input { flex-direction: column; }
+      #character-name { width: 100%; }
+    }
+  </style>
 </head>
 <body>
+  <div id="online-bar">
+    <div class="dot-online" id="conn-dot"></div>
+    <span>Online:</span>
+    <div id="online-users" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">—</div>
+  </div>
 
-    <div id="chat">
+  <div id="chat"></div>
+  <div id="typing-indicator"></div>
+  <div id="toast-container"></div>
 
+  <div id="chat-input">
+    <input type="text" id="message" placeholder="Type your message here…" />
+    <div id="character-name">
+      <label for="name">Send messages as</label>
+      <input type="text" id="name" placeholder="Character Name" />
     </div>
+    <div class="input-hint">Enter — send · Ctrl+Enter — regenerate</div>
+  </div>
 
-    <div id="chat-input">
-        <input type="text" id="message" placeholder="Type your message here..." />
-        <div id="character-name">
-            <label for="name">Send messages as</label>
-            <input type="text" id="name" placeholder="Character Name" value="Liam" />
-        </div>    
-    </div>
-    
-    <script>
-        let lastHistoryString = '';
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // ═══════════════════════════════════
+    //  CONFIG
+    // ═══════════════════════════════════
 
-        async function fetchChatHistory() {
-            const response = await fetch('/get-chat');
-            const chatHistory = await response.json();
+    const fallbackAvatars = {
+      James: "/avatars/james.jpg",
+      "The Narrator": "/avatars/narrator.jpg",
+    };
 
-            const chatHistoryString = JSON.stringify(chatHistory);
-            if (chatHistoryString === lastHistoryString) {
-                return;
-            }
-            lastHistoryString = chatHistoryString;
+    const NAME_KEY = "stmp_character_name";
 
-            const chatDiv = document.getElementById('chat');
-            chatDiv.innerHTML = ''; // Clear existing messages
-            chatHistory.forEach(message => {
-                const messageDiv = document.createElement('div');
-                
-                const { name , is_user, mes } = message;
-                
-                const messageTitle = document.createElement('div');
-                messageTitle.className = 'title';
-                messageTitle.textContent = name;
-                
-                messageDiv.appendChild(messageTitle);
-                messageDiv.innerHTML += mes; // Append the message content
-                messageDiv.className = 'message' + (is_user ? ' user' : ' bot');
+    // ═══════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════
 
-                // surround * by italic tags:
-                messageDiv.innerHTML = messageDiv.innerHTML.replace(/\*(.*?)\*/g, '<i>$1</i>');
+    let currentHistory = [];
+    let pendingCommand = null; // tracks active command toast
 
-                chatDiv.appendChild(messageDiv);
-            });
+    // ═══════════════════════════════════
+    //  NAME PERSISTENCE
+    // ═══════════════════════════════════
 
-            chatDiv.scrollTop = chatDiv.scrollHeight;
+    const nameInput = document.getElementById("name");
+    nameInput.value = localStorage.getItem(NAME_KEY) || "Liam";
+    nameInput.addEventListener("input", () => localStorage.setItem(NAME_KEY, nameInput.value));
+    function getMyName() { return nameInput.value.trim() || "Guest"; }
+
+    // ═══════════════════════════════════
+    //  SOCKET.IO CONNECTION
+    // ═══════════════════════════════════
+
+    const socket = io({ reconnection: true, reconnectionDelay: 1000 });
+
+    socket.on('connect', () => {
+      console.log('[WS] Connected');
+      document.getElementById('conn-dot').className = 'dot-online';
+      socket.emit('heartbeat', { name: getMyName() });
+    });
+
+    socket.on('disconnect', () => {
+      console.log('[WS] Disconnected');
+      document.getElementById('conn-dot').className = 'dot-offline';
+    });
+
+    // ── Receive chat updates instantly ──
+    socket.on('chat-update', (history) => {
+      currentHistory = history;
+      renderChat(history);
+      // Clear pending command toast when chat updates
+      if (pendingCommand) {
+        dismissToast(pendingCommand);
+        pendingCommand = null;
+      }
+    });
+
+    // ── Command acknowledged ──
+    socket.on('command-ack', ({ type }) => {
+      // Toast already shown on send
+    });
+
+    // ── Online users ──
+    socket.on('online-users', (users) => {
+      const el = document.getElementById("online-users");
+      el.innerHTML = users.length
+        ? users.map(u => `<span class="user-tag">${esc(u)}</span>`).join("")
+        : '<span style="color:#52525b">—</span>';
+    });
+
+    // ── Typing ──
+    const typingState = new Map(); // name → timeout id
+
+    socket.on('user-typing', ({ name }) => {
+      if (name === getMyName()) return;
+      clearTimeout(typingState.get(name));
+      typingState.set(name, setTimeout(() => {
+        typingState.delete(name);
+        renderTyping();
+      }, 4000));
+      renderTyping();
+    });
+
+    function renderTyping() {
+      const names = [...typingState.keys()];
+      const el = document.getElementById("typing-indicator");
+      if (!names.length) { el.textContent = ""; return; }
+      el.textContent = names.length === 1
+        ? `${names[0]} is typing…`
+        : `${names.join(", ")} are typing…`;
+    }
+
+    // ── Heartbeat ──
+    setInterval(() => socket.emit('heartbeat', { name: getMyName() }), 5000);
+
+    // ═══════════════════════════════════
+    //  MARKED
+    // ═══════════════════════════════════
+
+    marked.use({ breaks: true, gfm: true });
+
+    function formatMessage(raw) {
+      let text = (raw || "").replace(/\r\n/g, "\n");
+      text = text.replace(/<[^>]+>/g, "");
+
+      const bolds = [];
+      text = text.replace(/\*\*(.+?)\*\*/gs, (_, inner) => { bolds.push(inner); return `%%B${bolds.length-1}%%`; });
+      text = text.replace(/\*([^*\n]+?)\*/g, "_$1_");
+      text = text.replace(/%%B(\d+)%%/g, (_, i) => `**${bolds[i]}**`);
+
+      let html = marked.parse(text);
+      html = html.replace(/(?<!\\)&quot;(.*?)&quot;/gs, '<q>"$1"</q>');
+      html = html.replace(/(?<!\\)"(.*?)"/gs, "<q>\u201C$1\u201D</q>");
+      html = html.replace(/\u201C(.*?)\u201D/gs, "<q>\u201C$1\u201D</q>");
+      return html;
+    }
+
+    // ═══════════════════════════════════
+    //  AVATAR
+    // ═══════════════════════════════════
+
+    function createAvatar(name, url) {
+      const w = document.createElement("div"); w.className = "avatar";
+      if (url) {
+        const img = document.createElement("img"); img.src = url; img.alt = name;
+        img.onerror = () => { img.remove(); w.appendChild(mkInitials(name)); };
+        w.appendChild(img);
+      } else { w.appendChild(mkInitials(name)); }
+      return w;
+    }
+    function mkInitials(name) {
+      const s = document.createElement("span");
+      s.textContent = name.split(/\s+/).slice(0,2).map(w => w[0]||"").join("") || "?";
+      return s;
+    }
+
+    // ═══════════════════════════════════
+    //  VISIBILITY FILTER
+    // ═══════════════════════════════════
+
+    function isVisible(msg) {
+      if (msg.is_system) return false;
+      if (msg.extra?.type === "narrator" && msg.extra?.isSmallSys) return false;
+      if (typeof msg.mes === "string" && msg.mes.includes("flex-container")) return false;
+      return true;
+    }
+
+    // ═══════════════════════════════════
+    //  RENDER
+    // ═══════════════════════════════════
+
+    function renderChat(history) {
+      const chat = document.getElementById("chat");
+      const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
+
+      let lastBotIdx = -1;
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (!history[i].is_user && isVisible(history[i])) { lastBotIdx = i; break; }
+      }
+
+      chat.innerHTML = "";
+      history.forEach((msg, i) => {
+        if (!isVisible(msg)) return;
+        chat.appendChild(renderMessage(msg, i, i === lastBotIdx));
+      });
+
+      if (atBottom) chat.scrollTop = chat.scrollHeight;
+    }
+
+    function renderMessage(msg, rawIndex, isLastBot) {
+      const { name, is_user, mes, avatar, swipes, swipe_id } = msg;
+      const el = document.createElement("div");
+      el.className = "message" + (is_user ? " user" : " bot");
+      el.dataset.index = rawIndex;
+
+      el.appendChild(createAvatar(name, avatar || fallbackAvatars[name] || null));
+
+      const bw = document.createElement("div"); bw.className = "bubble-wrap";
+      const bubble = document.createElement("div"); bubble.className = "bubble";
+
+      const title = document.createElement("div"); title.className = "msg-title";
+      title.textContent = name;
+      bubble.appendChild(title);
+
+      const mesDiv = document.createElement("div"); mesDiv.className = "mes-text";
+      mesDiv.innerHTML = formatMessage(mes);
+      bubble.appendChild(mesDiv);
+
+      // Hover actions
+      const actions = document.createElement("div"); actions.className = "msg-actions";
+      const editBtn = document.createElement("button"); editBtn.className = "action-btn";
+      editBtn.innerHTML = "✎"; editBtn.title = "Edit";
+      editBtn.onclick = () => enterEdit(el, rawIndex, mes);
+      actions.appendChild(editBtn);
+      bubble.appendChild(actions);
+
+      bw.appendChild(bubble);
+
+      // Swipe bar on last bot msg
+      if (!is_user && isLastBot) {
+        const idx = swipe_id ?? 0;
+        const total = swipes ? swipes.length : 1;
+        const bar = document.createElement("div"); bar.className = "swipe-bar";
+
+        if (total > 1) {
+          bar.appendChild(mkSwipeBtn("◂", "Previous", idx <= 0, () =>
+            sendCmd({ type: "swipe", direction: "left" }, "◂ Swiping…")));
         }
 
-        fetchChatHistory();
-        setInterval(fetchChatHistory, 2 * 1000);
+        const counter = document.createElement("span"); counter.className = "swipe-counter";
+        counter.textContent = `${idx + 1} / ${total}`;
+        bar.appendChild(counter);
 
-        function appendGhostUserMessage(name, message) {
-            const chatDiv = document.getElementById('chat');
-            const messageDiv = document.createElement('div');            
-            
-            const messageTitle = document.createElement('div');
-            messageTitle.className = 'title';
-            messageTitle.textContent = name;
-            
-            messageDiv.appendChild(messageTitle);
-            messageDiv.innerHTML += message;
-            messageDiv.className = 'message user ghost';
+        bar.appendChild(mkSwipeBtn("▸", "Next / generate", false, () =>
+          sendCmd({ type: "swipe", direction: "right" }, "▸ Generating swipe…")));
 
-            // surround * by italic tags:
-            messageDiv.innerHTML = messageDiv.innerHTML.replace(/\*(.*?)\*/g, '<i>$1</i>');
+        bw.appendChild(bar);
+      }
 
-            chatDiv.appendChild(messageDiv);
-        }
+      el.appendChild(bw);
+      return el;
+    }
 
-        const messageInput = document.getElementById('message');
-        messageInput.addEventListener('keydown', async (event) => {
-            if (event.key === 'Enter') {
-                const message = messageInput.value;
-                const name = document.getElementById('name').value;
-                if (message.trim() === '') return; // Ignore empty messages
+    function mkSwipeBtn(label, title, disabled, onclick) {
+      const b = document.createElement("button"); b.className = "swipe-btn";
+      b.textContent = label; b.title = title; b.disabled = disabled; b.onclick = onclick;
+      return b;
+    }
 
-                // Send the message to the server
-                await fetch('/queue-message', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ message, name })
-                });
+    // ═══════════════════════════════════
+    //  INLINE EDIT
+    // ═══════════════════════════════════
 
-                appendGhostUserMessage(name, message);
+    function enterEdit(msgEl, index, original) {
+      const bubble = msgEl.querySelector(".bubble");
+      if (bubble.querySelector(".edit-overlay")) return;
 
-                messageInput.value = ''; // Clear the input field
-            }
-        });
-    </script>
+      const mesText = bubble.querySelector(".mes-text");
+      const actionsEl = bubble.querySelector(".msg-actions");
+      mesText.style.display = "none";
+      if (actionsEl) actionsEl.style.display = "none";
+
+      const overlay = document.createElement("div"); overlay.className = "edit-overlay";
+      const ta = document.createElement("textarea"); ta.className = "edit-textarea";
+      ta.value = original;
+      overlay.appendChild(ta);
+
+      requestAnimationFrame(() => {
+        ta.style.height = "auto";
+        ta.style.height = Math.max(100, ta.scrollHeight + 4) + "px";
+      });
+      ta.addEventListener("input", () => {
+        ta.style.height = "auto";
+        ta.style.height = ta.scrollHeight + 4 + "px";
+      });
+
+      const bar = document.createElement("div"); bar.className = "edit-bar";
+      const cancel = document.createElement("button"); cancel.className = "btn-cancel";
+      cancel.textContent = "Cancel"; cancel.onclick = close;
+      const save = document.createElement("button"); save.className = "btn-save";
+      save.textContent = "Save";
+      save.onclick = () => {
+        sendCmd({ type: "edit", index, text: ta.value }, "✎ Saving edit…");
+        close();
+      };
+      bar.appendChild(cancel); bar.appendChild(save);
+      overlay.appendChild(bar);
+      bubble.appendChild(overlay);
+      ta.focus();
+
+      ta.addEventListener("keydown", e => {
+        if (e.key === "Escape") close();
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save.click();
+      });
+
+      function close() {
+        overlay.remove();
+        mesText.style.display = "";
+        if (actionsEl) actionsEl.style.display = "";
+      }
+    }
+
+    // ═══════════════════════════════════
+    //  SEND COMMANDS VIA SOCKET
+    // ═══════════════════════════════════
+
+    function sendCmd(cmd, toastText) {
+      socket.emit('command', cmd);
+      if (toastText) pendingCommand = showToast(toastText, 0); // 0 = stays until dismissed
+    }
+
+    // ═══════════════════════════════════
+    //  TOAST SYSTEM
+    // ═══════════════════════════════════
+
+    function showToast(text, duration = 3000) {
+      const container = document.getElementById("toast-container");
+      const t = document.createElement("div"); t.className = "toast";
+      if (duration === 0) t.innerHTML = `<div class="spinner"></div>${esc(text)}`;
+      else t.textContent = text;
+      container.appendChild(t);
+
+      if (duration > 0) {
+        setTimeout(() => dismissToast(t), duration);
+      }
+      return t;
+    }
+
+    function dismissToast(t) {
+      if (!t || !t.parentNode) return;
+      t.classList.add("fade-out");
+      setTimeout(() => t.remove(), 300);
+    }
+
+    // ═══════════════════════════════════
+    //  GHOST (optimistic)
+    // ═══════════════════════════════════
+
+    function appendGhost(name, message) {
+      const chat = document.getElementById("chat");
+      const g = renderMessage({ name, is_user: true, mes: message, avatar: fallbackAvatars[name] }, -1, false);
+      g.classList.add("ghost");
+      chat.appendChild(g);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // ═══════════════════════════════════
+    //  INPUT
+    // ═══════════════════════════════════
+
+    document.getElementById("message").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sendCmd({ type: "regenerate" }, "⟳ Regenerating…");
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        const msg = e.target.value.trim();
+        if (!msg) return;
+        const name = getMyName();
+        sendCmd({ type: "message", message: msg, name });
+        appendGhost(name, msg);
+        e.target.value = "";
+      }
+    });
+
+    document.getElementById("message").addEventListener("input", () => {
+      socket.emit('typing', { name: getMyName() });
+    });
+
+    // ═══════════════════════════════════
+    //  UTILS
+    // ═══════════════════════════════════
+
+    function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  </script>
 </body>
 </html>

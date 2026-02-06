@@ -28,13 +28,25 @@ When a player sends a message, the extension mimics user actions — it selects 
 
 ### 1. Install the extension
 
-Copy the extension folder into your SillyTavern extensions directory:
+Clone the repo into your into your SillyTavern extensions directory:
 ```
 SillyTavern/data/default-user/extensions/
 ```
 Make sure `index.js` and `manifest.json` are in the root of the extension folder.
 
-### 2. Start the server
+### 2. Move folders
+
+Move or copy the silly-tavern-mp-extension and server folders into your root extension folder mentioned above so that the structure looks like this:
+```extensions/
+  silly-tavern-mp-extension/
+    index.js
+    manifest.json
+  server/
+    index.js
+    package.json
+```
+
+### 3. Start the server
 
 ```bash
 cd server
@@ -45,14 +57,14 @@ Or just double-click `start.bat`.
 
 The server runs on port 3000 by default.
 
-### 3. Configure
+### 4. Configure
 
 If the server runs on a different machine, update `const TARGET_URL` in the extension's `index.js`:
 ```js
 const TARGET_URL = 'http://your-server-address:3000';
 ```
 
-### 4. Connect
+### 5. Connect
 
 - Open `http://localhost:3000` (or your server's address) in a browser
 - Enter your character name

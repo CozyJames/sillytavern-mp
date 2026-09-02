@@ -21,6 +21,8 @@ app.use(express.static('public'));
 
 // ──────────── State ────────────
 let chatHistory = [];
+let sessionInfo = null; // characters, personas, current chat/character, tokens
+let generationStatus = { generating: false, characterName: null };
 const onlineUsers = new Map(); // name → timestamp
 const PRESENCE_TIMEOUT = 12_000;
 
@@ -28,8 +30,10 @@ const PRESENCE_TIMEOUT = 12_000;
 io.on('connection', (socket) => {
   console.log(`[WS] Connected: ${socket.id}`);
 
-  // Send current chat history to newly connected client
+  // Send current state to newly connected client
   socket.emit('chat-update', chatHistory);
+  if (sessionInfo) socket.emit('session-info', sessionInfo);
+  socket.emit('generation-status', generationStatus);
 
   // Broadcast current online list
   broadcastOnline();
@@ -39,6 +43,28 @@ io.on('connection', (socket) => {
     chatHistory = data;
     // Broadcast to everyone EXCEPT the sender (extension)
     socket.broadcast.emit('chat-update', chatHistory);
+  });
+
+  // ── Session info (characters/personas/current chat/tokens) from ST extension ──
+  socket.on('session-info', (data) => {
+    sessionInfo = data;
+    socket.broadcast.emit('session-info', sessionInfo);
+  });
+
+  // ── AI generation status from ST extension, visible to every player ──
+  socket.on('generation-status', (data) => {
+    generationStatus = data;
+    socket.broadcast.emit('generation-status', generationStatus);
+  });
+
+  // ── Errors relayed from ST's own toast notifications ──
+  socket.on('error', (data) => {
+    socket.broadcast.emit('error', data);
+  });
+
+  // ── Past chats list, requested by a web client, gathered by the extension ──
+  socket.on('chats-list', (data) => {
+    socket.broadcast.emit('chats-list', data);
   });
 
   // ── Command from web client → forward to ST extension ──

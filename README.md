@@ -7,28 +7,33 @@ Based on [LiamDobbelaere/sillytavern-mp](https://github.com/LiamDobbelaere/silly
 ## What's different in this fork
 
 - **WebSocket** - instant message delivery instead of HTTP polling, near-zero latency
+- **STscript-driven** - every action in the tavern (sending, swiping, regenerating, deleting, switching character, new chat) runs through SillyTavern's own slash commands, not simulated clicks
+- **Full session control** - switch the active character, start a new chat, or load a past chat, all from the web client
+- **Personas from the tavern** - the "send as" list and every avatar (characters and personas) are pulled live from SillyTavern, no manual configuration in the web client
+- **Delete & edit messages** - click 🗑 or ✎ on any message
 - **Swipes** - navigate between alternative AI responses from the web client
 - **Regenerate** - Ctrl+Enter to regenerate the last AI response
-- **Edit messages** - click ✎ on any message to edit it inline
-- **Online presence** - see who's connected in real time
-- **Typing indicators** - see when someone is typing
-- **Visual feedback** - toast notifications for swipes, regeneration, edits
+- **Generation indicator** - everyone sees when the AI is generating, and which character
+- **Thinking blocks** - reasoning-model "thinking" output is shown live, same as in the tavern
+- **Context meter** - a live token / max-context counter for the current chat
+- **Error toasts** - failures from the tavern (bad API key, connection issues, etc.) show up for everyone
+- **Online presence & typing indicators** - see who's connected and who's typing
 - **Markdown rendering** - proper formatting with bold, italic, dialogue highlighting
-- **Persistent name** - character name saves across page refreshes
+- **Persistent persona** - your selected persona is remembered across page refreshes
 
 ## How it works
 
-1. The **ST extension** runs inside SillyTavern on the host's machine
-2. The **server** relays chat history and commands between ST and web clients via WebSocket
-3. The **web client** is a lightweight frontend where players read the chat and send messages
+1. The **extension** runs inside SillyTavern on the host's machine
+2. The **server** relays chat history, session state (characters/personas/chats/tokens) and commands between the extension and web clients via WebSocket
+3. The **web client** is a lightweight frontend where players manage the session and send messages
 
-When a player sends a message, the extension mimics user actions — it selects the matching persona, types the message, and triggers AI generation.
+When a player sends a message, the extension runs it through SillyTavern's STscript engine (`/persona-set`, `/send`, `/trigger`, `/swipe`, `/regenerate`, `/cut`, `/go`, `/newchat`) — the same commands you'd type into the tavern yourself — so it behaves exactly like a normal user action, no DOM click simulation involved.
 
 ## Setup
 
 ### 1. Install the extension
 
-Clone the repo into your into your SillyTavern extensions directory:
+Clone the repo into your SillyTavern extensions directory:
 ```
 SillyTavern/data/default-user/extensions/
 ```
@@ -36,10 +41,10 @@ Make sure `index.js` and `manifest.json` are in the root of the extension folder
 
 ### 2. Move folders
 
-Move or copy the silly-tavern-mp-extension and server folders into your root extension folder mentioned above so that the structure looks like this:
+Move or copy the `extension` and `server` folders into your root extension folder mentioned above so that the structure looks like this:
 ```
 extensions/
-  silly-tavern-mp-extension/
+  extension/
   server/
 ```
 
@@ -48,7 +53,7 @@ extensions/
 ```bash
 cd server
 npm install
-node index.js
+node server.js
 ```
 Or just double-click `start.bat`.
 
@@ -61,10 +66,12 @@ If the server runs on a different machine, update `const TARGET_URL` in the exte
 const TARGET_URL = 'http://your-server-address:3000';
 ```
 
+Personas, characters and presets are configured once in SillyTavern itself — the web client picks them up automatically, players never need to open the tavern.
+
 ### 5. Connect
 
 - Open `http://localhost:3000` (or your server's address) in a browser
-- Enter your character name
+- Pick your persona from the "Send as" list
 - Start sending messages
 
 ## Exposing to the internet
@@ -75,15 +82,17 @@ For friends to connect remotely, you need to expose the server. Options:
 - **Cloudflare Tunnel** / **ngrok** — no port forwarding needed
 - **VPS** — host the server on a cheap VPS
 
-Your SillyTavern instance stays local — only the server needs to be reachable.
+Your SillyTavern instance stays local — only the server needs to be reachable. Note that avatars are loaded directly from your SillyTavern instance's origin, so if you only tunnel the multiplayer server, avatar images won't load for remote players.
 
 ## Controls
 
 | Action | Shortcut |
 |---|---|
-| Send message | Enter |
+| Send message | Enter / Send button |
 | Regenerate | Ctrl+Enter |
 | Swipe left/right | ◂ ▸ buttons on last AI message |
 | Edit message | ✎ button (hover over message) |
+| Delete message | 🗑 button (hover over message) |
 | Save edit | Ctrl+Enter in edit mode |
 | Cancel edit | Escape |
+| Session panel (character/chats) | ☰ button in the top bar |

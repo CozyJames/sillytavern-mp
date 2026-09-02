@@ -25,6 +25,10 @@
       --blue: #3b82f6;
       --blue-dim: rgba(59,130,246,0.15);
       --blue-glow: rgba(59,130,246,0.3);
+      --red: #ef4444;
+      --red-dim: rgba(239,68,68,0.15);
+      --amber: #f59e0b;
+      --amber-dim: rgba(245,158,11,0.15);
       --radius: 14px;
       --radius-sm: 8px;
       --shadow: 0 4px 10px rgba(0,0,0,0.4);
@@ -38,13 +42,14 @@
       -webkit-font-smoothing: antialiased;
     }
     body { display: flex; flex-direction: column; align-items: center; }
+    button { font-family: inherit; }
 
     /* ═══════ ONLINE BAR ═══════ */
     #online-bar {
       width: 100%; max-width: 960px;
       background: var(--bg-2);
       padding: 8px 18px;
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
       font-size: 13px; color: var(--text-muted);
       border-bottom: 1px solid #1e1e24;
       flex-shrink: 0;
@@ -67,6 +72,20 @@
       font-size: 12px; color: var(--text-accent);
       border: 1px solid rgba(147,197,253,0.12);
     }
+    #online-users { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .bar-spacer { flex: 1 1 auto; }
+    .context-meter { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .context-meter-bar { width: 60px; height: 5px; border-radius: 3px; background: var(--bg-3); overflow: hidden; }
+    .context-meter-fill { height: 100%; background: var(--blue); border-radius: 3px; transition: width 0.3s ease; }
+    .context-meter-fill.warn { background: var(--amber); }
+    .context-meter-fill.crit { background: var(--red); }
+    .icon-btn {
+      background: none; border: 1px solid var(--border); color: var(--text-dim);
+      width: 28px; height: 28px; border-radius: var(--radius-sm); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; transition: all 0.15s; padding: 0; flex-shrink: 0;
+    }
+    .icon-btn:hover { background: var(--blue-dim); color: var(--text-accent); border-color: var(--blue); }
 
     /* ═══════ CHAT ═══════ */
     #chat {
@@ -112,6 +131,18 @@
     .message.user.ghost .bubble { opacity: var(--user-ghost-opacity); }
     .msg-title { font-weight: 600; margin-bottom: 4px; font-size: 14px; color: var(--text-accent); }
 
+    /* ═══════ THINKING ═══════ */
+    .thinking {
+      margin-bottom: 8px; border: 1px dashed var(--border-hover);
+      border-radius: var(--radius-sm); background: rgba(0,0,0,0.2);
+    }
+    .thinking summary {
+      cursor: pointer; padding: 6px 10px; font-size: 12px;
+      color: var(--text-muted); user-select: none;
+    }
+    .thinking summary:hover { color: var(--text-accent); }
+    .thinking-body { padding: 0 10px 8px; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+
     /* ═══════ HOVER ACTIONS ═══════ */
     .msg-actions { position: absolute; top: 6px; right: 6px; display: none; gap: 3px; z-index: 2; }
     .message:hover .msg-actions { display: flex; }
@@ -123,6 +154,7 @@
       font-size: 13px; transition: all 0.15s; padding: 0;
     }
     .action-btn:hover { background: var(--blue-glow); color: var(--text-accent); border-color: var(--blue); }
+    .action-btn.danger:hover { background: var(--red-dim); color: #fca5a5; border-color: var(--red); }
 
     /* ═══════ EDIT MODE ═══════ */
     .edit-overlay { margin-top: 8px; }
@@ -170,6 +202,32 @@
     .mes-text pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: var(--radius-sm); overflow-x: auto; }
     .mes-text pre code { background: none; padding: 0; }
 
+    /* ═══════ GENERATING INDICATOR ═══════ */
+    #generating-indicator {
+      position: fixed;
+      bottom: 82px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 960px;
+      width: 100%;
+      padding: 0 18px;
+      font-size: 13px;
+      color: var(--text-accent);
+      display: none;
+      align-items: center; gap: 8px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #generating-indicator.active { display: flex; }
+    #generating-indicator .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid var(--border-hover);
+      border-top-color: var(--text-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
     /* ═══════ TYPING INDICATOR ═══════ */
     #typing-indicator {
       position: fixed;
@@ -183,9 +241,10 @@
       color: var(--text-muted);
       font-style: italic;
       pointer-events: none;
-      z-index: 10;
+      z-index: 9;
     }
     #typing-indicator:empty { display: none; }
+    #generating-indicator.active ~ #typing-indicator { bottom: 104px; }
 
     /* ═══════ TOAST ═══════ */
     #toast-container {
@@ -202,14 +261,18 @@
       display: flex; align-items: center; gap: 8px;
       animation: toastIn 0.2s ease-out;
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      max-width: min(90vw, 420px);
     }
     .toast.fade-out { animation: toastOut 0.3s ease-in forwards; }
+    .toast.toast-error { border-color: var(--red); color: #fca5a5; }
+    .toast.toast-warning { border-color: var(--amber); color: #fcd34d; }
     .toast .spinner {
       width: 14px; height: 14px;
       border: 2px solid var(--border-hover);
       border-top-color: var(--text-accent);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
@@ -222,7 +285,7 @@
       background: var(--bg-2);
       padding: 12px 16px 16px;
       box-shadow: 0 -4px 14px rgba(0,0,0,0.5);
-      display: flex; gap: 12px; flex-wrap: wrap;
+      display: flex; gap: 10px; flex-wrap: wrap;
     }
     #message {
       flex: 1 1 auto; padding: 11px 14px;
@@ -233,40 +296,120 @@
       max-height: 200px; min-height: 44px;
     }
     #message:focus { border-color: var(--blue); }
-    #character-name { display: flex; flex-direction: column; gap: 4px; width: 200px; }
+    #message:disabled { opacity: 0.5; }
+    #character-name { display: flex; flex-direction: column; gap: 4px; width: 180px; }
     #character-name label { font-size: 12px; color: var(--text-muted); }
-    #name {
+    #persona-select {
       padding: 9px 12px; background: var(--bg-3);
       border: 1px solid var(--border); border-radius: var(--radius);
       color: var(--text-primary); font-size: 14px; outline: none;
+      font-family: inherit;
     }
-    #name:focus { border-color: var(--blue); }
+    #persona-select:focus { border-color: var(--blue); }
+    #send-btn {
+      flex: 0 0 auto; align-self: flex-end;
+      background: var(--blue); color: white; border: none;
+      border-radius: var(--radius); padding: 0 18px; height: 44px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+    }
+    #send-btn:hover { background: #2563eb; }
+    #send-btn:disabled { opacity: 0.5; cursor: default; }
     .input-hint { width: 100%; font-size: 11px; color: #3f3f46; text-align: right; margin-top: -4px; }
 
     @media (max-width: 560px) {
       #chat-input { flex-direction: column; }
       #character-name { width: 100%; }
+      #send-btn { align-self: stretch; height: 40px; }
     }
+
+    /* ═══════ SESSION PANEL ═══════ */
+    #panel-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 199; display: none;
+    }
+    #panel-backdrop.open { display: block; }
+    #session-panel {
+      position: fixed; top: 0; right: -340px; width: 320px; height: 100%;
+      background: var(--bg-2); border-left: 1px solid var(--border);
+      z-index: 200; transition: right 0.2s ease-out;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    #session-panel.open { right: 0; }
+    .panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .panel-header h2 { font-size: 15px; margin: 0; color: var(--text-title); }
+    .panel-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 18px; }
+    .panel-section h3 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); margin: 0 0 8px;
+    }
+    .panel-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+    .panel-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer;
+      border: 1px solid transparent; transition: all 0.15s;
+    }
+    .panel-item:hover { background: var(--bg-3); }
+    .panel-item.active { border-color: var(--blue); background: var(--blue-dim); }
+    .panel-item .avatar { width: 32px; height: 32px; flex: 0 0 32px; font-size: 12px; }
+    .panel-item-name { font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .panel-item-sub { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .panel-empty { font-size: 12px; color: var(--text-muted); padding: 6px 0; }
+    .panel-btn {
+      width: 100%; padding: 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+      background: var(--bg-3); color: var(--text-primary); font-size: 13px; cursor: pointer;
+      transition: all 0.15s; margin-bottom: 8px;
+    }
+    .panel-btn:hover { background: var(--blue-dim); border-color: var(--blue); color: var(--text-accent); }
   </style>
 </head>
 <body>
   <div id="online-bar">
     <div class="dot-online" id="conn-dot"></div>
     <span>Online:</span>
-    <div id="online-users" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">—</div>
+    <div id="online-users">—</div>
+    <div class="bar-spacer"></div>
+    <div class="context-meter" id="context-meter" title="Estimated chat tokens vs. max context" hidden>
+      <span id="context-meter-text">– / –</span>
+      <div class="context-meter-bar"><div class="context-meter-fill" id="context-meter-fill" style="width:0%"></div></div>
+    </div>
+    <button class="icon-btn" id="session-btn" title="Session (character, chats)">☰</button>
   </div>
 
   <div id="chat"></div>
+  <div id="generating-indicator"><div class="spinner"></div><span id="generating-text"></span></div>
   <div id="typing-indicator"></div>
   <div id="toast-container"></div>
 
   <div id="chat-input">
     <textarea id="message" placeholder="Type your message here…" rows="1"></textarea>
     <div id="character-name">
-      <label for="name">Send messages as</label>
-      <input type="text" id="name" placeholder="Character Name" />
+      <label for="persona-select">Send as</label>
+      <select id="persona-select"><option value="">Loading personas…</option></select>
     </div>
+    <button id="send-btn" title="Send (Enter)">Send</button>
     <div class="input-hint">Enter — send · Shift+Enter — new line · Ctrl+Enter — regenerate</div>
+  </div>
+
+  <div id="panel-backdrop"></div>
+  <div id="session-panel">
+    <div class="panel-header">
+      <h2>Session</h2>
+      <button class="icon-btn" id="panel-close">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="panel-section">
+        <h3>Character</h3>
+        <div class="panel-list" id="character-list"><div class="panel-empty">Waiting for extension…</div></div>
+      </div>
+      <div class="panel-section">
+        <h3>Chat</h3>
+        <button class="panel-btn" id="new-chat-btn">＋ New chat</button>
+        <div class="panel-list" id="chat-list"><div class="panel-empty">Open to load past chats…</div></div>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
@@ -281,7 +424,8 @@
       "The Narrator": "/avatars/narrator.jpg",
     };
 
-    const NAME_KEY = "stmp_character_name";
+    const NAME_KEY = "stmp_character_name"; // legacy freeform name, used as a last-resort persona match
+    const PERSONA_ID_KEY = "stmp_persona_id";
 
     // ═══════════════════════════════════
     //  STATE
@@ -289,15 +433,51 @@
 
     let currentHistory = [];
     let pendingCommand = null; // tracks active command toast
+    let sessionInfo = null;    // characters, personas, current chat/character, tokens
+    let isGenerating = false;
+    let characterAvatarByName = {};
+    let personaAvatarByName = {};
 
     // ═══════════════════════════════════
-    //  NAME PERSISTENCE
+    //  PERSONA SELECT (per-player, local)
     // ═══════════════════════════════════
 
-    const nameInput = document.getElementById("name");
-    nameInput.value = localStorage.getItem(NAME_KEY) || "Liam";
-    nameInput.addEventListener("input", () => localStorage.setItem(NAME_KEY, nameInput.value));
-    function getMyName() { return nameInput.value.trim() || "Guest"; }
+    const personaSelect = document.getElementById("persona-select");
+
+    function getMyPersonaId() {
+      return personaSelect.value || localStorage.getItem(PERSONA_ID_KEY) || "";
+    }
+    function getMyPersonaName() {
+      const opt = personaSelect.selectedOptions[0];
+      return opt ? opt.textContent : (localStorage.getItem(NAME_KEY) || "Guest");
+    }
+
+    personaSelect.addEventListener("change", () => {
+      localStorage.setItem(PERSONA_ID_KEY, personaSelect.value);
+    });
+
+    function renderPersonaSelect(personas) {
+      const savedId = localStorage.getItem(PERSONA_ID_KEY);
+      const prevValue = personaSelect.value;
+      personaSelect.innerHTML = "";
+      if (!personas || !personas.length) {
+        personaSelect.innerHTML = '<option value="">No personas configured</option>';
+        return;
+      }
+      for (const p of personas) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        personaSelect.appendChild(opt);
+      }
+      const want = prevValue || savedId;
+      if (want && personas.some(p => p.id === want)) {
+        personaSelect.value = want;
+      } else {
+        personaSelect.value = personas[0].id;
+        localStorage.setItem(PERSONA_ID_KEY, personaSelect.value);
+      }
+    }
 
     // ═══════════════════════════════════
     //  SOCKET.IO CONNECTION
@@ -308,7 +488,7 @@
     socket.on('connect', () => {
       console.log('[WS] Connected');
       document.getElementById('conn-dot').className = 'dot-online';
-      socket.emit('heartbeat', { name: getMyName() });
+      socket.emit('heartbeat', { name: getMyPersonaName() });
     });
 
     socket.on('disconnect', () => {
@@ -332,6 +512,43 @@
       // Toast already shown on send
     });
 
+    // ── Session info: characters, personas, current chat, tokens ──
+    socket.on('session-info', (info) => {
+      sessionInfo = info;
+      characterAvatarByName = {};
+      (info.characters || []).forEach(c => { characterAvatarByName[c.name] = c.avatarUrl; });
+      personaAvatarByName = {};
+      (info.personas || []).forEach(p => { personaAvatarByName[p.name] = p.avatarUrl; });
+
+      renderPersonaSelect(info.personas);
+      renderCharacterList(info);
+      renderContextMeter(info);
+      // Re-render chat so avatars picked up from the fresh maps
+      if (currentHistory.length) renderChat(currentHistory);
+    });
+
+    // ── AI generation status, visible to everyone ──
+    socket.on('generation-status', ({ generating, characterName }) => {
+      isGenerating = !!generating;
+      const el = document.getElementById('generating-indicator');
+      const textEl = document.getElementById('generating-text');
+      el.classList.toggle('active', isGenerating);
+      textEl.textContent = characterName ? `${characterName} is generating…` : 'Generating…';
+      messageInput.disabled = isGenerating;
+      document.getElementById('send-btn').disabled = isGenerating;
+      if (currentHistory.length) renderChat(currentHistory);
+    });
+
+    // ── Errors relayed from SillyTavern's own toasts ──
+    socket.on('error', ({ type, message }) => {
+      showToast(`⚠ ${message}`, 6000, type === 'warning' ? 'toast-warning' : 'toast-error');
+    });
+
+    // ── Past chats list ──
+    socket.on('chats-list', ({ chats }) => {
+      renderChatList(chats || []);
+    });
+
     // ── Online users ──
     socket.on('online-users', (users) => {
       const el = document.getElementById("online-users");
@@ -344,7 +561,7 @@
     const typingState = new Map(); // name → timeout id
 
     socket.on('user-typing', ({ name }) => {
-      if (name === getMyName()) return;
+      if (name === getMyPersonaName()) return;
       clearTimeout(typingState.get(name));
       typingState.set(name, setTimeout(() => {
         typingState.delete(name);
@@ -363,7 +580,114 @@
     }
 
     // ── Heartbeat ──
-    setInterval(() => socket.emit('heartbeat', { name: getMyName() }), 5000);
+    setInterval(() => socket.emit('heartbeat', { name: getMyPersonaName() }), 5000);
+
+    // ═══════════════════════════════════
+    //  CONTEXT / TOKEN METER
+    // ═══════════════════════════════════
+
+    function renderContextMeter(info) {
+      const el = document.getElementById('context-meter');
+      if (!info.maxContext) { el.hidden = true; return; }
+      el.hidden = false;
+      const used = info.contextTokens || 0;
+      const max = info.maxContext;
+      const pct = Math.min(100, Math.round((used / max) * 100));
+      document.getElementById('context-meter-text').textContent =
+        `${used.toLocaleString()} / ${max.toLocaleString()} (${pct}%)`;
+      const fill = document.getElementById('context-meter-fill');
+      fill.style.width = pct + '%';
+      fill.classList.toggle('warn', pct >= 75 && pct < 90);
+      fill.classList.toggle('crit', pct >= 90);
+    }
+
+    // ═══════════════════════════════════
+    //  SESSION PANEL
+    // ═══════════════════════════════════
+
+    const panel = document.getElementById('session-panel');
+    const panelBackdrop = document.getElementById('panel-backdrop');
+
+    function openPanel() {
+      panel.classList.add('open');
+      panelBackdrop.classList.add('open');
+      sendCmd({ type: 'list-chats' });
+    }
+    function closePanel() {
+      panel.classList.remove('open');
+      panelBackdrop.classList.remove('open');
+    }
+    document.getElementById('session-btn').addEventListener('click', openPanel);
+    document.getElementById('panel-close').addEventListener('click', closePanel);
+    panelBackdrop.addEventListener('click', closePanel);
+
+    function renderCharacterList(info) {
+      const el = document.getElementById('character-list');
+      const characters = info.characters || [];
+      if (!characters.length) {
+        el.innerHTML = '<div class="panel-empty">No characters found</div>';
+        return;
+      }
+      el.innerHTML = '';
+      for (const c of characters) {
+        const isActive = info.character && info.character.id === c.id;
+        const item = document.createElement('div');
+        item.className = 'panel-item' + (isActive ? ' active' : '');
+        item.appendChild(createAvatar(c.name, c.avatarUrl));
+        const name = document.createElement('div');
+        name.className = 'panel-item-name';
+        name.textContent = c.name;
+        item.appendChild(name);
+        if (!isActive) {
+          item.addEventListener('click', () => {
+            if (!confirm(`Switch the shared session to "${c.name}"? This changes the chat for everyone.`)) return;
+            sendCmd({ type: 'switch-character', characterId: c.id }, `↪ Switching to ${c.name}…`);
+            closePanel();
+          });
+        }
+        el.appendChild(item);
+      }
+    }
+
+    function renderChatList(chats) {
+      const el = document.getElementById('chat-list');
+      if (!chats.length) {
+        el.innerHTML = '<div class="panel-empty">No past chats for this character</div>';
+        return;
+      }
+      el.innerHTML = '';
+      const currentFile = sessionInfo?.chatId;
+      for (const c of chats) {
+        const isActive = c.fileName === currentFile;
+        const item = document.createElement('div');
+        item.className = 'panel-item' + (isActive ? ' active' : '');
+        const info = document.createElement('div');
+        info.style.overflow = 'hidden';
+        const name = document.createElement('div');
+        name.className = 'panel-item-name';
+        name.textContent = c.fileName;
+        const sub = document.createElement('div');
+        sub.className = 'panel-item-sub';
+        sub.textContent = (c.messageCount ? `${c.messageCount} msgs` : '') + (c.preview ? ` · ${c.preview}` : '');
+        info.appendChild(name);
+        info.appendChild(sub);
+        item.appendChild(info);
+        if (!isActive) {
+          item.addEventListener('click', () => {
+            if (!confirm(`Load chat "${c.fileName}" for everyone?`)) return;
+            sendCmd({ type: 'load-chat', fileName: c.fileName }, `📂 Loading ${c.fileName}…`);
+            closePanel();
+          });
+        }
+        el.appendChild(item);
+      }
+    }
+
+    document.getElementById('new-chat-btn').addEventListener('click', () => {
+      if (!confirm('Start a new chat for everyone? The current chat is kept in history.')) return;
+      sendCmd({ type: 'new-chat' }, '＋ Starting new chat…');
+      closePanel();
+    });
 
     // ═══════════════════════════════════
     //  MARKED
@@ -444,6 +768,13 @@
     //  AVATAR
     // ═══════════════════════════════════
 
+    function resolveAvatarUrl(name, isUser, explicitUrl) {
+      if (explicitUrl) return explicitUrl;
+      if (isUser && personaAvatarByName[name]) return personaAvatarByName[name];
+      if (!isUser && characterAvatarByName[name]) return characterAvatarByName[name];
+      return fallbackAvatars[name] || null;
+    }
+
     function createAvatar(name, url) {
       const w = document.createElement("div"); w.className = "avatar";
       if (url) {
@@ -455,7 +786,7 @@
     }
     function mkInitials(name) {
       const s = document.createElement("span");
-      s.textContent = name.split(/\s+/).slice(0,2).map(w => w[0]||"").join("") || "?";
+      s.textContent = (name || "?").split(/\s+/).slice(0,2).map(w => w[0]||"").join("") || "?";
       return s;
     }
 
@@ -493,12 +824,12 @@
     }
 
     function renderMessage(msg, rawIndex, isLastBot) {
-      const { name, is_user, mes, avatar, swipes, swipe_id, renderedHtml } = msg;
+      const { name, is_user, mes, avatar, swipes, swipe_id, renderedHtml, reasoningHtml } = msg;
       const el = document.createElement("div");
       el.className = "message" + (is_user ? " user" : " bot");
       el.dataset.index = rawIndex;
 
-      el.appendChild(createAvatar(name, avatar || fallbackAvatars[name] || null));
+      el.appendChild(createAvatar(name, resolveAvatarUrl(name, is_user, null) || avatar));
 
       const bw = document.createElement("div"); bw.className = "bubble-wrap";
       const bubble = document.createElement("div"); bubble.className = "bubble";
@@ -506,6 +837,16 @@
       const title = document.createElement("div"); title.className = "msg-title";
       title.textContent = name;
       bubble.appendChild(title);
+
+      if (!is_user && reasoningHtml && reasoningHtml.trim()) {
+        const details = document.createElement("details"); details.className = "thinking";
+        const summary = document.createElement("summary"); summary.textContent = "🧠 Thinking";
+        details.appendChild(summary);
+        const body = document.createElement("div"); body.className = "thinking-body";
+        body.innerHTML = sanitizeRenderedHtml(reasoningHtml);
+        details.appendChild(body);
+        bubble.appendChild(details);
+      }
 
       const mesDiv = document.createElement("div"); mesDiv.className = "mes-text";
       if (renderedHtml) {
@@ -519,12 +860,21 @@
       bubble.appendChild(mesDiv);
 
       // Hover actions
-      const actions = document.createElement("div"); actions.className = "msg-actions";
-      const editBtn = document.createElement("button"); editBtn.className = "action-btn";
-      editBtn.innerHTML = "✎"; editBtn.title = "Edit";
-      editBtn.onclick = () => enterEdit(el, rawIndex, mes);
-      actions.appendChild(editBtn);
-      bubble.appendChild(actions);
+      if (rawIndex >= 0) {
+        const actions = document.createElement("div"); actions.className = "msg-actions";
+        const editBtn = document.createElement("button"); editBtn.className = "action-btn";
+        editBtn.innerHTML = "✎"; editBtn.title = "Edit";
+        editBtn.onclick = () => enterEdit(el, rawIndex, mes);
+        actions.appendChild(editBtn);
+        const delBtn = document.createElement("button"); delBtn.className = "action-btn danger";
+        delBtn.innerHTML = "🗑"; delBtn.title = "Delete";
+        delBtn.onclick = () => {
+          if (!confirm("Delete this message for everyone?")) return;
+          sendCmd({ type: "delete", index: rawIndex }, "🗑 Deleting…");
+        };
+        actions.appendChild(delBtn);
+        bubble.appendChild(actions);
+      }
 
       bw.appendChild(bubble);
 
@@ -535,7 +885,7 @@
         const bar = document.createElement("div"); bar.className = "swipe-bar";
 
         if (total > 1) {
-          bar.appendChild(mkSwipeBtn("◂", "Previous", idx <= 0, () =>
+          bar.appendChild(mkSwipeBtn("◂", "Previous", idx <= 0 || isGenerating, () =>
             sendCmd({ type: "swipe", direction: "left" }, "◂ Swiping…")));
         }
 
@@ -543,7 +893,7 @@
         counter.textContent = `${idx + 1} / ${total}`;
         bar.appendChild(counter);
 
-        bar.appendChild(mkSwipeBtn("▸", "Next / generate", false, () =>
+        bar.appendChild(mkSwipeBtn("▸", "Next / generate", isGenerating, () =>
           sendCmd({ type: "swipe", direction: "right" }, "▸ Generating swipe…")));
 
         bw.appendChild(bar);
@@ -625,9 +975,9 @@
     //  TOAST SYSTEM
     // ═══════════════════════════════════
 
-    function showToast(text, duration = 3000) {
+    function showToast(text, duration = 3000, extraClass = '') {
       const container = document.getElementById("toast-container");
-      const t = document.createElement("div"); t.className = "toast";
+      const t = document.createElement("div"); t.className = "toast" + (extraClass ? ' ' + extraClass : '');
       if (duration === 0) t.innerHTML = `<div class="spinner"></div>${esc(text)}`;
       else t.textContent = text;
       container.appendChild(t);
@@ -650,7 +1000,7 @@
 
     function appendGhost(name, message) {
       const chat = document.getElementById("chat");
-      const g = renderMessage({ name, is_user: true, mes: message, avatar: fallbackAvatars[name] }, -1, false);
+      const g = renderMessage({ name, is_user: true, mes: message, avatar: personaAvatarByName[name] || fallbackAvatars[name] }, -1, false);
       g.classList.add("ghost");
       chat.appendChild(g);
       chat.scrollTop = chat.scrollHeight;
@@ -661,11 +1011,26 @@
     // ═══════════════════════════════════
 
     const messageInput = document.getElementById("message");
+    const sendBtn = document.getElementById("send-btn");
 
     function resizeMessageInput() {
       messageInput.style.height = "auto";
       messageInput.style.height = Math.min(200, messageInput.scrollHeight) + "px";
     }
+
+    function doSend() {
+      const msg = messageInput.value.trim();
+      if (!msg || isGenerating) return;
+      const personaId = getMyPersonaId();
+      if (!personaId) { showToast('⚠ No persona selected', 4000, 'toast-warning'); return; }
+      const name = getMyPersonaName();
+      sendCmd({ type: "message", personaId, message: msg, name });
+      appendGhost(name, msg);
+      messageInput.value = "";
+      resizeMessageInput();
+    }
+
+    sendBtn.addEventListener("click", doSend);
 
     messageInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -679,18 +1044,12 @@
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        const msg = e.target.value.trim();
-        if (!msg) return;
-        const name = getMyName();
-        sendCmd({ type: "message", message: msg, name });
-        appendGhost(name, msg);
-        e.target.value = "";
-        resizeMessageInput();
+        doSend();
       }
     });
 
     messageInput.addEventListener("input", () => {
-      socket.emit('typing', { name: getMyName() });
+      socket.emit('typing', { name: getMyPersonaName() });
       resizeMessageInput();
     });
 

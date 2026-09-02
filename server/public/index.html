@@ -41,7 +41,7 @@
 
     /* ═══════ ONLINE BAR ═══════ */
     #online-bar {
-      width: 100%; max-width: 700px;
+      width: 100%; max-width: 960px;
       background: var(--bg-2);
       padding: 8px 18px;
       display: flex; align-items: center; gap: 10px;
@@ -70,7 +70,7 @@
 
     /* ═══════ CHAT ═══════ */
     #chat {
-      width: 100%; max-width: 700px;
+      width: 100%; max-width: 960px;
       flex: 1 1 auto;
       display: flex; flex-direction: column; gap: 14px;
       padding: 16px 18px 150px;
@@ -172,11 +172,20 @@
 
     /* ═══════ TYPING INDICATOR ═══════ */
     #typing-indicator {
-      padding: 0 18px 2px; font-size: 13px;
-      color: var(--text-muted); font-style: italic;
-      height: 18px; max-width: 700px; width: 100%; flex-shrink: 0;
+      position: fixed;
+      bottom: 82px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 960px;
+      width: 100%;
+      padding: 0 18px;
+      font-size: 13px;
+      color: var(--text-muted);
+      font-style: italic;
+      pointer-events: none;
+      z-index: 10;
     }
-    #typing-indicator:empty { height: 0; padding: 0; }
+    #typing-indicator:empty { display: none; }
 
     /* ═══════ TOAST ═══════ */
     #toast-container {
@@ -209,7 +218,7 @@
     /* ═══════ INPUT ═══════ */
     #chat-input {
       position: fixed; bottom: 0; left: 0; right: 0;
-      margin: 0 auto; max-width: 700px;
+      margin: 0 auto; max-width: 960px;
       background: var(--bg-2);
       padding: 12px 16px 16px;
       box-shadow: 0 -4px 14px rgba(0,0,0,0.5);
@@ -219,7 +228,9 @@
       flex: 1 1 auto; padding: 11px 14px;
       background: var(--bg-3); border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--text-primary);
-      font-size: 15px; transition: border 0.15s; outline: none;
+      font-size: 15px; font-family: inherit; transition: border 0.15s; outline: none;
+      resize: none; overflow-y: hidden; line-height: 1.4;
+      max-height: 200px; min-height: 44px;
     }
     #message:focus { border-color: var(--blue); }
     #character-name { display: flex; flex-direction: column; gap: 4px; width: 200px; }
@@ -250,12 +261,12 @@
   <div id="toast-container"></div>
 
   <div id="chat-input">
-    <input type="text" id="message" placeholder="Type your message here…" />
+    <textarea id="message" placeholder="Type your message here…" rows="1"></textarea>
     <div id="character-name">
       <label for="name">Send messages as</label>
       <input type="text" id="name" placeholder="Character Name" />
     </div>
-    <div class="input-hint">Enter — send · Ctrl+Enter — regenerate</div>
+    <div class="input-hint">Enter — send · Shift+Enter — new line · Ctrl+Enter — regenerate</div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
@@ -360,20 +371,73 @@
 
     marked.use({ breaks: true, gfm: true });
 
+    // Light sanitization for ST's own rendered HTML — it's trusted content,
+    // but strip event handlers/scripts since it now travels over the network
+    function sanitizeRenderedHtml(html) {
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      container.querySelectorAll('script').forEach(el => el.remove());
+      container.querySelectorAll('*').forEach(el => {
+        for (const attr of [...el.attributes]) {
+          const n = attr.name.toLowerCase();
+          if (n.startsWith('on') || n === 'srcdoc') el.removeAttribute(attr.name);
+          if (n === 'href' && attr.value.trim().toLowerCase().startsWith('javascript:')) {
+            el.setAttribute('href', '#');
+          }
+        }
+        if (el.tagName === 'A') el.setAttribute('target', '_blank');
+      });
+      return container.innerHTML;
+    }
+
     function formatMessage(raw) {
       let text = (raw || "").replace(/\r\n/g, "\n");
-      text = text.replace(/<[^>]+>/g, "");
 
-      const bolds = [];
-      text = text.replace(/\*\*(.+?)\*\*/gs, (_, inner) => { bolds.push(inner); return `%%B${bolds.length-1}%%`; });
-      text = text.replace(/\*([^*\n]+?)\*/g, "_$1_");
-      text = text.replace(/%%B(\d+)%%/g, (_, i) => `**${bolds[i]}**`);
+      // Strip ST-internal junk
+      text = text.replace(/<[^>]*(flex-container|menu_button|drawer-opener|mes_button|swipe_|fa-solid|fa-fw)[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+      text = text.replace(/<[^>]*(flex-container|menu_button|drawer-opener|mes_button|swipe_|fa-solid|fa-fw)[^>]*\/?>/gi, '');
 
-      let html = marked.parse(text);
-      html = html.replace(/(?<!\\)&quot;(.*?)&quot;/gs, '<q>"$1"</q>');
-      html = html.replace(/(?<!\\)"(.*?)"/gs, "<q>\u201C$1\u201D</q>");
-      html = html.replace(/\u201C(.*?)\u201D/gs, "<q>\u201C$1\u201D</q>");
-      return html;
+      // Use DOM to split: parse HTML, process text nodes with markdown
+      const container = document.createElement('div');
+      container.innerHTML = text;
+
+      // Walk all text nodes and apply formatting
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+      for (const node of textNodes) {
+        let t = node.textContent;
+        if (!t.trim()) continue;
+
+        // Check if parent has inline style (inside styled HTML block)
+        const inStyledBlock = node.parentElement && node.parentElement.closest('[style]');
+
+        // Convert \n to <br> for text not inside <pre>
+        const inPre = node.parentElement && node.parentElement.closest('pre');
+        if (!inPre) {
+          t = t.replace(/\n/g, '<br>');
+        }
+
+        // Apply *italic* and **bold**
+        t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        t = t.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
+
+        // Apply dialogue coloring (only on text not inside styled elements to avoid breaking style attrs)
+        if (!inStyledBlock) {
+          t = t.replace(/"([^"]+)"/g, '<q>“$1”</q>');
+          t = t.replace(/“([^”]+)”/g, '<q>“$1”</q>');
+        }
+
+        // Replace text node with formatted HTML
+        if (t !== node.textContent) {
+          const span = document.createElement('span');
+          span.innerHTML = t;
+          node.parentNode.replaceChild(span, node);
+        }
+      }
+
+      return container.innerHTML;
     }
 
     // ═══════════════════════════════════
@@ -429,7 +493,7 @@
     }
 
     function renderMessage(msg, rawIndex, isLastBot) {
-      const { name, is_user, mes, avatar, swipes, swipe_id } = msg;
+      const { name, is_user, mes, avatar, swipes, swipe_id, renderedHtml } = msg;
       const el = document.createElement("div");
       el.className = "message" + (is_user ? " user" : " bot");
       el.dataset.index = rawIndex;
@@ -444,7 +508,14 @@
       bubble.appendChild(title);
 
       const mesDiv = document.createElement("div"); mesDiv.className = "mes-text";
-      mesDiv.innerHTML = formatMessage(mes);
+      if (renderedHtml) {
+        // Use SillyTavern's own rendered output — already has macros,
+        // display Regex, and formatting applied exactly as ST shows it
+        mesDiv.innerHTML = sanitizeRenderedHtml(renderedHtml);
+      } else {
+        // Fallback: message not yet found in ST's DOM (e.g. optimistic ghost)
+        mesDiv.innerHTML = formatMessage(mes);
+      }
       bubble.appendChild(mesDiv);
 
       // Hover actions
@@ -589,24 +660,38 @@
     //  INPUT
     // ═══════════════════════════════════
 
-    document.getElementById("message").addEventListener("keydown", (e) => {
+    const messageInput = document.getElementById("message");
+
+    function resizeMessageInput() {
+      messageInput.style.height = "auto";
+      messageInput.style.height = Math.min(200, messageInput.scrollHeight) + "px";
+    }
+
+    messageInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         sendCmd({ type: "regenerate" }, "⟳ Regenerating…");
         return;
       }
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && e.shiftKey) {
+        // Let the browser insert a newline naturally
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
         const msg = e.target.value.trim();
         if (!msg) return;
         const name = getMyName();
         sendCmd({ type: "message", message: msg, name });
         appendGhost(name, msg);
         e.target.value = "";
+        resizeMessageInput();
       }
     });
 
-    document.getElementById("message").addEventListener("input", () => {
+    messageInput.addEventListener("input", () => {
       socket.emit('typing', { name: getMyName() });
+      resizeMessageInput();
     });
 
     // ═══════════════════════════════════
@@ -614,6 +699,7 @@
     // ═══════════════════════════════════
 
     function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
   </script>
 </body>
 </html>

@@ -12,6 +12,9 @@ let processing = false;
 // ──────────── Boot: load socket.io client dynamically ────────────
 
 function boot() {
+  const ctx = getContext();
+  console.log('[MP] Extension booting. executeSlashCommandsWithOptions available:', typeof ctx.executeSlashCommandsWithOptions === 'function');
+
   const script = document.createElement('script');
   script.src = TARGET_URL + '/socket.io/socket.io.js';
   script.onload = () => {
@@ -55,14 +58,28 @@ function connectSocket() {
 
 // ──────────── Push chat history to server ────────────
 
-function pushChatHistory() {
+// Grab ST's own rendered HTML for each message — this already has
+// markdown/HTML formatting, macros ({{getvar::x}}, {{char}}, etc.) resolved,
+// and any display Regex scripts applied, exactly as SillyTavern shows them.
+function getEnrichedChat() {
   const chat = getContext().chat;
-  const str = JSON.stringify(chat);
+  return chat.map((msg, i) => {
+    const mesBlock = document.querySelector(`#chat .mes[mesid="${i}"] .mes_text`);
+    return {
+      ...msg,
+      renderedHtml: mesBlock ? mesBlock.innerHTML : null,
+    };
+  });
+}
+
+function pushChatHistory() {
+  const enriched = getEnrichedChat();
+  const str = JSON.stringify(enriched);
   if (str === lastChatStr) return;
   lastChatStr = str;
 
   if (socket && socket.connected) {
-    socket.emit('chat-update', chat);
+    socket.emit('chat-update', enriched);
   } else {
     // HTTP fallback
     fetch(TARGET_URL + '/set-chat', {
@@ -103,10 +120,40 @@ function executeCommand(cmd) {
   }
 }
 
-// ──────────── Send message as character ────────────
+// ──────────── Send message as character (via STscript) ────────────
 
-function sendMessageAs(name, message) {
+async function sendMessageAs(name, message) {
   console.log('[MP] Sending as:', name);
+  const ctx = getContext();
+
+  const safeName = stEscape(name);
+  const safeMessage = stEscape(message);
+
+  // NOTE: /persona and /send take raw text as their argument — they do NOT
+  // strip surrounding quotes like a shell would. Wrapping in "" just puts
+  // literal quote characters into the message. Only pipes need escaping,
+  // since | is the STscript command separator.
+  const script = `/persona ${safeName} | /send ${safeMessage} | /trigger`;
+
+  try {
+    await ctx.executeSlashCommandsWithOptions(script);
+    console.log('[MP] Sent via STscript');
+  } catch (e) {
+    console.error('[MP] STscript send failed:', e);
+    // Fallback to old DOM method
+    sendMessageAsLegacy(name, message);
+  }
+}
+
+// Escape characters that would break STscript command chaining
+function stEscape(str) {
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|');
+}
+
+function sendMessageAsLegacy(name, message) {
+  console.log('[MP] Falling back to legacy DOM method');
   $("#user_avatar_block .avatar-container").each((k, v) => {
     if (v.innerText.toLowerCase().includes(name.toLowerCase())) v.click();
   });
@@ -116,8 +163,23 @@ function sendMessageAs(name, message) {
 
 // ──────────── Swipe ────────────
 
-function handleSwipe(direction) {
+async function handleSwipe(direction) {
   console.log('[MP] Swipe:', direction);
+
+  if (direction === 'right') {
+    // Right swipe generates a new one — use official STscript command
+    const ctx = getContext();
+    try {
+      await ctx.executeSlashCommandsWithOptions('/swipe');
+      console.log('[MP] Swiped right via STscript');
+      setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 2000);
+      return;
+    } catch (e) {
+      console.warn('[MP] /swipe STscript failed, trying DOM fallback:', e);
+    }
+  }
+
+  // Left swipe (navigate back) or fallback: DOM click
   const lastMes = $('#chat .mes').last();
   if (!lastMes.length) { console.warn('[MP] No messages'); return; }
 
@@ -125,42 +187,43 @@ function handleSwipe(direction) {
   const btn = lastMes.find(cls);
   if (btn.length) {
     btn.trigger('click');
-    console.log('[MP] Swipe triggered:', cls);
+    console.log('[MP] Swipe triggered via DOM:', cls);
   } else {
     console.warn('[MP] Swipe button not found:', cls);
     console.warn('[MP] Available:', lastMes.find('[class*=swipe]').map((i,e) => e.className).get());
   }
 
-  // Force re-sync chat after swipe
   setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 2000);
 }
 
-// ──────────── Regenerate ────────────
+// ──────────── Regenerate (via STscript) ────────────
 
-function handleRegenerate() {
+async function handleRegenerate() {
   console.log('[MP] Regenerating');
+  const ctx = getContext();
 
-  // Try clicking regenerate button directly (it may be hidden in a menu)
+  try {
+    await ctx.executeSlashCommandsWithOptions('/regenerate');
+    console.log('[MP] Regenerated via STscript');
+    setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 3000);
+    return;
+  } catch (e) {
+    console.warn('[MP] /regenerate STscript failed, trying DOM fallback:', e);
+  }
+
+  // Fallback: DOM click
   const selectors = ['#option_regenerate', '.option_regenerate', '#regenerate_but', '.regenerate_but'];
   for (const sel of selectors) {
     const btn = $(sel);
     if (btn.length) {
       btn[0].click();
-      console.log('[MP] Regen via:', sel);
+      console.log('[MP] Regen via DOM:', sel);
       setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 3000);
       return;
     }
   }
 
-  // Fallback: trigger generate with 'regenerate' type via ST API
-  console.log('[MP] No regen button, using generate API');
-  try {
-    getContext().generate('regenerate');
-    setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 3000);
-  } catch (e) {
-    console.warn('[MP] generate() fallback failed:', e);
-    handleSwipe('right');
-  }
+  console.warn('[MP] All regenerate methods failed');
 }
 
 // ──────────── Edit ────────────
@@ -220,6 +283,23 @@ eventSource.on(event_types.MESSAGE_RECEIVED, () => {
   // Force push on new messages for faster sync
   lastChatStr = '';
   pushChatHistory();
+  // Retry shortly after — DOM render can lag slightly behind this event
+  setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 500);
 });
+
+// Fires once ST has actually painted the message into the DOM —
+// this is when .mes_text has the final rendered HTML available
+if (event_types.CHARACTER_MESSAGE_RENDERED) {
+  eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, () => {
+    lastChatStr = '';
+    pushChatHistory();
+  });
+}
+if (event_types.USER_MESSAGE_RENDERED) {
+  eventSource.on(event_types.USER_MESSAGE_RENDERED, () => {
+    lastChatStr = '';
+    pushChatHistory();
+  });
+}
 
 boot();

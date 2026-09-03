@@ -167,18 +167,10 @@ async function buildSessionInfo() {
     avatarUrl: absoluteUrl(ctx.getThumbnailUrl('persona', id)),
   }));
 
-  // Sum tokens from the most recent message backwards, stopping once we've
-  // covered maxContext — mirrors how ST actually fills its context window
-  // (newest first, older messages drop off) instead of summing the entire
-  // chat history, which only grows and quickly reads as a nonsensical "1000%".
   let contextTokens = 0;
   try {
-    const chat = ctx.chat || [];
-    const maxCtx = ctx.maxContext || 0;
-    for (let i = chat.length - 1; i >= 0; i--) {
-      contextTokens += await ctx.getTokenCountAsync(chat[i].mes || '');
-      if (maxCtx && contextTokens >= maxCtx) break;
-    }
+    const text = (ctx.chat || []).map(m => m.mes || '').join('\n');
+    contextTokens = await ctx.getTokenCountAsync(text);
   } catch (e) {
     console.warn('[MP] Token count failed:', e);
   }

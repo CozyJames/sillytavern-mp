@@ -4,7 +4,7 @@
 const puppeteer = require('puppeteer-core');
 
 const ST_URL = process.env.ST_URL || 'http://127.0.0.1:8000';
-const CHROME_PATH = process.env.CHROME_PATH || '/usr/bin/chromium';
+const CHROME_PATH = process.env.CHROME_PATH || '/usr/bin/chromium-browser';
 const RELOAD_MS = 30 * 60 * 1000; // reload every 30 min in case the tab wedges
 
 async function main() {

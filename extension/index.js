@@ -144,6 +144,21 @@ function absoluteUrl(relativePath) {
   return window.location.origin + relativePath;
 }
 
+// getContext().maxContext mirrors ST's internal `max_context` variable,
+// which is only kept up to date for kobold/text-generation-webui backends.
+// For chat-completion (OpenAI-compatible) connections — what any proxy/
+// aggregator uses — the real limit lives in chatCompletionSettings
+// (oai_settings).openai_max_context instead; ST's own getMaxContextTokens()
+// branches on mainApi the same way, it's just not exposed through
+// getContext() itself. Without this, every chat-completion connection
+// shows ST's small hardcoded default instead of the preset's real value.
+function getRealMaxContext(ctx) {
+  if (ctx.mainApi === 'openai') {
+    return ctx.chatCompletionSettings?.openai_max_context ?? ctx.maxContext;
+  }
+  return ctx.maxContext;
+}
+
 async function buildSessionInfo() {
   const ctx = getContext();
 
@@ -178,7 +193,7 @@ async function buildSessionInfo() {
   return {
     character,
     chatId: ctx.chatId ?? null,
-    maxContext: ctx.maxContext,
+    maxContext: getRealMaxContext(ctx),
     contextTokens,
     characters,
     personas,

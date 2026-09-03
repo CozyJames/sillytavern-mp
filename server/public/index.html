@@ -420,6 +420,9 @@
   <div id="confirm-backdrop">
     <div id="confirm-box">
       <p id="confirm-text"></p>
+      <label id="confirm-skip-row" style="display:none; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); margin-bottom:16px; cursor:pointer;">
+        <input type="checkbox" id="confirm-skip" /> Don't ask again
+      </label>
       <div id="confirm-bar">
         <button id="confirm-cancel">Cancel</button>
         <button id="confirm-ok">OK</button>
@@ -642,12 +645,20 @@
     //  CONFIRM MODAL (replaces native confirm() — no URL in the popup)
     // ═══════════════════════════════════
 
-    function askConfirm(text) {
+    function askConfirm(text, opts) {
+      const skipKey = opts?.skipKey ? `stmp_skip_confirm_${opts.skipKey}` : null;
+      if (skipKey && localStorage.getItem(skipKey) === '1') return Promise.resolve(true);
+
       const backdrop = document.getElementById('confirm-backdrop');
+      const skipRow = document.getElementById('confirm-skip-row');
+      const skipBox = document.getElementById('confirm-skip');
       document.getElementById('confirm-text').textContent = text;
+      skipRow.style.display = skipKey ? 'flex' : 'none';
+      skipBox.checked = false;
       backdrop.classList.add('open');
       return new Promise((resolve) => {
         function done(result) {
+          if (result && skipKey && skipBox.checked) localStorage.setItem(skipKey, '1');
           backdrop.classList.remove('open');
           okBtn.removeEventListener('click', onOk);
           cancelBtn.removeEventListener('click', onCancel);
@@ -707,7 +718,7 @@
         item.appendChild(name);
         if (!isActive) {
           item.addEventListener('click', async () => {
-            if (!(await askConfirm(`Switch the shared session to "${c.name}"? This changes the chat for everyone.`))) return;
+            if (!(await askConfirm(`Switch the shared session to "${c.name}"? This changes the chat for everyone.`, { skipKey: 'switch-character' }))) return;
             sendCmd({ type: 'switch-character', characterId: c.id }, `↪ Switching to ${c.name}…`);
             closePanel();
           });
@@ -875,6 +886,15 @@
     //  RENDER
     // ═══════════════════════════════════
 
+    // Signature of everything that affects a message's rendered output —
+    // used to skip rebuilding (and re-decoding/flashing avatar <img>s for)
+    // messages that haven't actually changed since the last render.
+    function messageSignature(msg, isLastBot) {
+      const { name, is_user, mes, avatar, swipes, swipe_id, renderedHtml, reasoningHtml } = msg;
+      const avatarUrl = resolveAvatarUrl(name, is_user, null) || avatar || '';
+      return [name, is_user, avatarUrl, swipe_id, swipes ? swipes.length : 1, isLastBot ? 1 : 0, renderedHtml || mes, reasoningHtml || ''].join('');
+    }
+
     function renderChat(history) {
       const chat = document.getElementById("chat");
       const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
@@ -884,11 +904,32 @@
         if (!history[i].is_user && isVisible(history[i])) { lastBotIdx = i; break; }
       }
 
-      chat.innerHTML = "";
+      const existingByIndex = new Map();
+      [...chat.children].forEach(el => existingByIndex.set(el.dataset.index, el));
+      const seen = new Set();
+
+      let prevNode = null;
       history.forEach((msg, i) => {
         if (!isVisible(msg)) return;
-        chat.appendChild(renderMessage(msg, i, i === lastBotIdx));
+        const isLastBot = i === lastBotIdx;
+        const key = String(i);
+        seen.add(key);
+        const sig = messageSignature(msg, isLastBot);
+        let node = existingByIndex.get(key);
+        if (!node || node.dataset.sig !== sig) {
+          const fresh = renderMessage(msg, i, isLastBot);
+          fresh.dataset.sig = sig;
+          if (node) node.replaceWith(fresh);
+          node = fresh;
+        }
+        const wantPos = prevNode ? prevNode.nextSibling : chat.firstChild;
+        if (wantPos !== node) chat.insertBefore(node, wantPos);
+        prevNode = node;
       });
+
+      for (const [key, el] of existingByIndex) {
+        if (!seen.has(key)) el.remove();
+      }
 
       if (atBottom) chat.scrollTop = chat.scrollHeight;
     }

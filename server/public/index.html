@@ -419,7 +419,6 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script>
     // ═══════════════════════════════════
@@ -455,8 +454,12 @@
       return personaSelect.value || localStorage.getItem(PERSONA_ID_KEY) || "";
     }
     function getMyPersonaName() {
+      // Guard against the placeholder "Loading personas…"/"No personas
+      // configured" option, which has no value and isn't a real persona —
+      // showing its text as our name would leak into the online-users list.
       const opt = personaSelect.selectedOptions[0];
-      return opt ? opt.textContent : (localStorage.getItem(NAME_KEY) || "Guest");
+      if (opt && opt.value) return opt.textContent;
+      return localStorage.getItem(NAME_KEY) || "Guest";
     }
 
     personaSelect.addEventListener("change", () => {
@@ -698,12 +701,6 @@
       sendCmd({ type: 'new-chat' }, '＋ Starting new chat…');
       closePanel();
     });
-
-    // ═══════════════════════════════════
-    //  MARKED
-    // ═══════════════════════════════════
-
-    marked.use({ breaks: true, gfm: true });
 
     // Light sanitization for ST's own rendered HTML — it's trusted content,
     // but strip event handlers/scripts since it now travels over the network

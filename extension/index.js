@@ -139,9 +139,14 @@ function pushChatHistory() {
 
 // ──────────── Session info (characters, personas, chats, tokens) ────────────
 
+// Deliberately NOT prefixed with window.location.origin: that would be
+// whatever origin this extension's own browser used to reach ST (e.g.
+// localhost:8000 through an SSH tunnel), which is meaningless — and often
+// blocked outright by the viewer's browser (Private/Local Network Access)
+// — for any other player's browser. The MP server proxies /thumbnail
+// itself (see server.js), fetching it server-side from ST directly.
 function absoluteUrl(relativePath) {
-  if (!relativePath) return null;
-  return window.location.origin + relativePath;
+  return relativePath || null;
 }
 
 // getContext().maxContext mirrors ST's internal `max_context` variable,
@@ -658,7 +663,14 @@ if (event_types.PERSONA_CHANGED) {
 }
 
 // Generation status, visible to every player
-eventSource.on(event_types.GENERATION_STARTED, () => setGenerating(true));
+// GENERATION_STARTED's first argument is the generation type. 'quiet' is
+// ST's own background/internal LLM calls (e.g. the Memory extension
+// re-summarizing the chat on load) — not a real reply anyone is waiting
+// on, so it shouldn't show "X is generating…" to every player.
+eventSource.on(event_types.GENERATION_STARTED, (type) => {
+  if (type === 'quiet') return;
+  setGenerating(true);
+});
 eventSource.on(event_types.GENERATION_STOPPED, () => setGenerating(false));
 eventSource.on(event_types.GENERATION_ENDED, () => setGenerating(false));
 

@@ -82,7 +82,7 @@ For friends to connect remotely, you need to expose the server. Options:
 - **Cloudflare Tunnel** / **ngrok** — no port forwarding needed
 - **VPS** — host the server on a cheap VPS
 
-Your SillyTavern instance stays local — only the server needs to be reachable. Note that avatars are loaded directly from your SillyTavern instance's origin, so if you only tunnel the multiplayer server, avatar images won't load for remote players.
+Your SillyTavern instance stays local — only the server needs to be reachable. The relay server proxies avatar images from SillyTavern itself (via `ST_LOCAL_URL`, default `http://127.0.0.1:8000`) — this works out of the box when SillyTavern and the relay server run on the same machine. If they run on different machines, set `ST_LOCAL_URL` to an address the relay server can actually reach SillyTavern at, or avatars will fall back to initials for everyone.
 
 ### Securing a publicly exposed server
 

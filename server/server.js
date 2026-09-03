@@ -130,6 +130,32 @@ if (authEnabled) {
   console.warn('[MP] MP_AUTH_USER / MP_AUTH_PASS not set — the server has NO authentication. Do not expose it to the internet like this.');
 }
 
+// ──────────── Avatar proxy ────────────
+// The extension no longer sends absolute avatar URLs (they'd point at
+// whatever origin its own browser used to reach ST — e.g. localhost:8000
+// through an SSH tunnel — which is meaningless, and often unreachable/
+// blocked by the viewer's browser, for anyone else). Instead it sends ST's
+// own relative /thumbnail path, and we fetch it server-side: this server
+// and ST normally run on the same box, so this is a plain loopback request
+// with none of the browser-side cross-origin/private-network restrictions.
+const ST_LOCAL_URL = process.env.ST_LOCAL_URL || 'http://127.0.0.1:8000';
+
+app.get('/thumbnail', async (req, res) => {
+  try {
+    const upstream = new URL('/thumbnail', ST_LOCAL_URL);
+    upstream.search = new URLSearchParams(req.query).toString();
+    const r = await fetch(upstream);
+    if (!r.ok) return res.sendStatus(r.status);
+    res.set('Content-Type', r.headers.get('content-type') || 'image/png');
+    res.set('Cache-Control', 'public, max-age=300');
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.send(buf);
+  } catch (e) {
+    console.error('[MP] Avatar proxy failed:', e.message);
+    res.sendStatus(502);
+  }
+});
+
 app.use(express.static('public'));
 
 // ──────────── State ────────────

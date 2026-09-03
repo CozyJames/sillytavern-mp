@@ -228,6 +228,8 @@ function executeCommand(cmd) {
     case 'regenerate':       handleRegenerate(); break;
     case 'edit':              handleEdit(cmd.index, cmd.text); break;
     case 'delete':           handleDelete(cmd.index); break;
+    case 'stop':              handleStop(); break;
+    case 'continue':         handleContinue(); break;
     case 'switch-character': handleSwitchCharacter(cmd.characterId); break;
     case 'new-chat':         handleNewChat(); break;
     case 'load-chat':        handleLoadChat(cmd.fileName); break;
@@ -370,6 +372,33 @@ async function handleDelete(index) {
   }
   lastChatStr = '';
   pushChatHistory();
+}
+
+// ──────────── Stop generation ────────────
+
+// SillyTavern's own /stop command just calls context.stopGeneration() under
+// the hood, and its docs note it can't run from the visible chat input box
+// during generation — calling the context function directly sidesteps that
+// UI-only restriction, which doesn't apply to a programmatic extension call.
+function handleStop() {
+  console.log('[MP] Stop generation');
+  const ctx = getContext();
+  const stopped = ctx.stopGeneration();
+  console.log('[MP] Stop result:', stopped);
+}
+
+// ──────────── Continue last message (via STscript) ────────────
+
+async function handleContinue() {
+  console.log('[MP] Continue');
+  const ctx = getContext();
+  try {
+    await ctx.executeSlashCommandsWithOptions('/continue');
+    console.log('[MP] Continued via STscript');
+  } catch (e) {
+    console.warn('[MP] /continue STscript failed:', e);
+  }
+  setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 3000);
 }
 
 // ──────────── Switch character (via STscript /go) ────────────

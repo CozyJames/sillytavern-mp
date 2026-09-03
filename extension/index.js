@@ -325,6 +325,10 @@ function executeCommand(cmd) {
     case 'load-chat':        handleLoadChat(cmd.fileName); break;
     case 'delete-chat':      handleDeleteChat(cmd.fileName); break;
     case 'list-chats':       handleListChats(); break;
+    case 'list-models':      handleListModels(); break;
+    case 'set-model':        handleSetModel(cmd.model); break;
+    case 'list-presets':     handleListPresets(); break;
+    case 'set-preset':       handleSetPreset(cmd.preset); break;
     default: console.warn('[MP] Unknown command:', cmd.type);
   }
 }
@@ -572,6 +576,129 @@ async function handleDeleteChat(fileName) {
     pushSessionInfo();
   }
   handleListChats();
+}
+
+// ──────────── Model selection ────────────
+
+// ST doesn't expose "the list of models for the active connection" through
+// getContext() — its own /model slash command reads it straight out of the
+// matching settings-panel DOM control (a <select>, or an <input> with a
+// <datalist>, depending on API/source), so we mirror that same lookup
+// rather than reimplementing model-list fetching per API. This map is
+// SillyTavern's own modelSelectMap (slash-commands.js), by API + sub-type.
+const MODEL_SELECT_MAP = {
+  'textgenerationwebui:generic': 'generic_model_textgenerationwebui',
+  'textgenerationwebui:ooba': 'custom_model_textgenerationwebui',
+  'textgenerationwebui:togetherai': 'model_togetherai_select',
+  'textgenerationwebui:openrouter': 'openrouter_model',
+  'textgenerationwebui:infermaticai': 'model_infermaticai_select',
+  'textgenerationwebui:dreamgen': 'model_dreamgen_select',
+  'textgenerationwebui:mancer': 'mancer_model',
+  'textgenerationwebui:vllm': 'vllm_model',
+  'textgenerationwebui:aphrodite': 'aphrodite_model',
+  'textgenerationwebui:ollama': 'ollama_model',
+  'textgenerationwebui:tabby': 'tabby_model',
+  'textgenerationwebui:llamacpp': 'llamacpp_model',
+  'textgenerationwebui:featherless': 'featherless_model',
+  'openai:openai': 'model_openai_select',
+  'openai:claude': 'model_claude_select',
+  'openai:openrouter': 'model_openrouter_select',
+  'openai:ai21': 'model_ai21_select',
+  'openai:makersuite': 'model_google_select',
+  'openai:vertexai': 'model_vertexai_select',
+  'openai:mistralai': 'model_mistralai_select',
+  'openai:custom': 'custom_model_id',
+  'openai:cohere': 'model_cohere_select',
+  'openai:perplexity': 'model_perplexity_select',
+  'openai:groq': 'model_groq_select',
+  'openai:chutes': 'model_chutes_select',
+  'openai:siliconflow': 'model_siliconflow_select',
+  'openai:minimax': 'model_minimax_select',
+  'openai:electronhub': 'model_electronhub_select',
+  'openai:nanogpt': 'model_nanogpt_select',
+  'openai:deepseek': 'model_deepseek_select',
+  'openai:aimlapi': 'model_aimlapi_select',
+  'openai:xai': 'model_xai_select',
+  'openai:pollinations': 'model_pollinations_select',
+  'openai:moonshot': 'model_moonshot_select',
+  'openai:fireworks': 'model_fireworks_select',
+  'openai:cometapi': 'model_cometapi_select',
+  'openai:zai': 'model_zai_select',
+  'openai:workers_ai': 'model_workers_ai_select',
+  'novel:null': 'model_novel_select',
+  'koboldhorde:null': 'horde_model',
+};
+
+function getModelSelectControl(ctx) {
+  const api = ctx.mainApi;
+  let subType = null;
+  if (api === 'textgenerationwebui') subType = ctx.textCompletionSettings?.type ?? null;
+  else if (api === 'openai') subType = ctx.chatCompletionSettings?.chat_completion_source ?? null;
+  const id = MODEL_SELECT_MAP[`${api}:${subType}`];
+  return id ? document.getElementById(id) : null;
+}
+
+function handleListModels() {
+  const ctx = getContext();
+  let options = [];
+  let current = '';
+  try {
+    const el = getModelSelectControl(ctx);
+    if (el instanceof HTMLSelectElement) {
+      current = el.value;
+      options = [...el.options].filter(o => o.value).map(o => ({ value: o.value, text: o.textContent || o.value }));
+    } else if (el instanceof HTMLInputElement) {
+      current = el.value;
+      if (el.list) options = [...el.list.options].map(o => ({ value: o.value, text: o.textContent || o.value }));
+    }
+  } catch (e) {
+    console.error('[MP] list-models failed:', e);
+  }
+  if (socket && socket.connected) socket.emit('models-list', { current, options });
+}
+
+async function handleSetModel(model) {
+  if (!model) return;
+  console.log('[MP] Set model:', model);
+  const ctx = getContext();
+  try {
+    await ctx.executeSlashCommandsWithOptions(`/model quiet=true ${stQuoteArg(model)}`);
+  } catch (e) {
+    console.error('[MP] /model failed:', e);
+  }
+  lastSessionStr = '';
+  pushSessionInfo();
+}
+
+// ──────────── Preset selection ────────────
+
+function handleListPresets() {
+  const ctx = getContext();
+  let options = [];
+  let current = '';
+  try {
+    const pm = ctx.getPresetManager();
+    if (pm) {
+      options = pm.getAllPresets() || [];
+      current = pm.getSelectedPresetName() || '';
+    }
+  } catch (e) {
+    console.error('[MP] list-presets failed:', e);
+  }
+  if (socket && socket.connected) socket.emit('presets-list', { current, options });
+}
+
+async function handleSetPreset(name) {
+  if (!name) return;
+  console.log('[MP] Set preset:', name);
+  const ctx = getContext();
+  try {
+    await ctx.executeSlashCommandsWithOptions(`/preset ${stQuoteArg(name)}`);
+  } catch (e) {
+    console.error('[MP] /preset failed:', e);
+  }
+  lastSessionStr = '';
+  pushSessionInfo();
 }
 
 // ──────────── List past chats for the current character ────────────

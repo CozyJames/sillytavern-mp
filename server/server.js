@@ -206,6 +206,14 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('chats-list', data);
   });
 
+  // ── Model / preset lists, requested by a web client, gathered by the extension ──
+  socket.on('models-list', (data) => {
+    socket.broadcast.emit('models-list', data);
+  });
+  socket.on('presets-list', (data) => {
+    socket.broadcast.emit('presets-list', data);
+  });
+
   // ── Command from web client → forward to ST extension ──
   socket.on('command', (cmd) => {
     console.log('[WS] Command:', cmd.type || 'message');

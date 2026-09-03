@@ -362,6 +362,11 @@
       transition: all 0.15s; margin-bottom: 8px;
     }
     .panel-btn:hover { background: var(--blue-dim); border-color: var(--blue); color: var(--text-accent); }
+    .panel-select {
+      width: 100%; padding: 9px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+      background: var(--bg-3); color: var(--text-primary); font-size: 13px; font-family: inherit; outline: none;
+    }
+    .panel-select:focus { border-color: var(--blue); }
 
     /* ═══════ CONFIRM MODAL ═══════ */
     #confirm-backdrop {
@@ -440,6 +445,14 @@
       <div class="panel-section">
         <h3>Character</h3>
         <div class="panel-list" id="character-list"><div class="panel-empty">Waiting for extension…</div></div>
+      </div>
+      <div class="panel-section">
+        <h3>Model</h3>
+        <select id="model-select" class="panel-select"><option value="">Loading…</option></select>
+      </div>
+      <div class="panel-section">
+        <h3>Preset</h3>
+        <select id="preset-select" class="panel-select"><option value="">Loading…</option></select>
       </div>
       <div class="panel-section">
         <h3>Chat</h3>
@@ -589,6 +602,10 @@
       renderChatList(chats || []);
     });
 
+    // ── Model / preset lists ──
+    socket.on('models-list', ({ current, options }) => renderModelSelect(current, options || []));
+    socket.on('presets-list', ({ current, options }) => renderPresetSelect(current, options || []));
+
     // ── Online users ──
     socket.on('online-users', (users) => {
       const el = document.getElementById("online-users");
@@ -687,6 +704,8 @@
       panel.classList.add('open');
       panelBackdrop.classList.add('open');
       sendCmd({ type: 'list-chats' });
+      sendCmd({ type: 'list-models' });
+      sendCmd({ type: 'list-presets' });
     }
     function closePanel() {
       panel.classList.remove('open');
@@ -769,6 +788,56 @@
         el.appendChild(item);
       }
     }
+
+    let currentModelValue = '';
+    function renderModelSelect(current, options) {
+      currentModelValue = current;
+      const el = document.getElementById('model-select');
+      el.innerHTML = '';
+      if (!options.length) { el.innerHTML = '<option value="">No models found</option>'; return; }
+      for (const o of options) {
+        const opt = document.createElement('option');
+        opt.value = o.value; opt.textContent = o.text || o.value;
+        if (o.value === current) opt.selected = true;
+        el.appendChild(opt);
+      }
+    }
+
+    let currentPresetValue = '';
+    function renderPresetSelect(current, options) {
+      currentPresetValue = current;
+      const el = document.getElementById('preset-select');
+      el.innerHTML = '';
+      if (!options.length) { el.innerHTML = '<option value="">No presets found</option>'; return; }
+      for (const name of options) {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name;
+        if (name === current) opt.selected = true;
+        el.appendChild(opt);
+      }
+    }
+
+    document.getElementById('model-select').addEventListener('change', async (e) => {
+      const val = e.target.value;
+      const prev = currentModelValue;
+      if (!val || val === prev) return;
+      if (!(await askConfirm(`Switch the shared model to "${val}"? This changes it for everyone.`, { skipKey: 'switch-model' }))) {
+        e.target.value = prev;
+        return;
+      }
+      sendCmd({ type: 'set-model', model: val }, `🧠 Switching model…`);
+    });
+
+    document.getElementById('preset-select').addEventListener('change', async (e) => {
+      const val = e.target.value;
+      const prev = currentPresetValue;
+      if (!val || val === prev) return;
+      if (!(await askConfirm(`Switch the shared preset to "${val}"? This changes it for everyone.`, { skipKey: 'switch-preset' }))) {
+        e.target.value = prev;
+        return;
+      }
+      sendCmd({ type: 'set-preset', preset: val }, `⚙ Switching preset…`);
+    });
 
     document.getElementById('new-chat-btn').addEventListener('click', async () => {
       if (!(await askConfirm('Start a new chat for everyone? The current chat is kept in history.'))) return;

@@ -25,18 +25,28 @@ const io = new Server(server, {
 
 // ──────────── Optional login (cookie session, not the browser's native Basic Auth popup) ────────────
 // Set MP_AUTH_USER / MP_AUTH_PASS to require signing in via /login for anyone
-// connecting from outside the box. Connections from localhost (the ST
-// extension, running on the same machine) are always exempt — that's
-// already gated by having a shell on the server.
+// connecting from outside the box. Connections from localhost are always
+// exempt (useful if the server and the browser viewing it are genuinely on
+// the same machine), but note that's usually NOT true for the ST extension:
+// it runs inside whatever browser is displaying the tavern, which is
+// normally a remote machine (the host's own laptop) even when the tavern
+// and this relay both run on the same VPS — so it needs its own way in.
+// Set MP_EXTENSION_TOKEN to a shared secret and put the same value in the
+// extension's AUTH_TOKEN constant to let it connect without a browser login.
 const AUTH_USER = process.env.MP_AUTH_USER;
 const AUTH_PASS = process.env.MP_AUTH_PASS;
 const authEnabled = Boolean(AUTH_USER && AUTH_PASS);
+const EXTENSION_TOKEN = process.env.MP_EXTENSION_TOKEN;
 const COOKIE_NAME = 'mp_session';
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const sessions = new Set(); // valid session tokens; cleared on restart
 
 function isLoopback(address) {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+function hasValidExtensionToken(token) {
+  return Boolean(EXTENSION_TOKEN && token && timingSafeStringEqual(token, EXTENSION_TOKEN));
 }
 
 function timingSafeStringEqual(a, b) {
@@ -102,6 +112,7 @@ if (authEnabled) {
   app.use((req, res, next) => {
     if (isLoopback(req.socket.remoteAddress)) return next();
     if (req.path === '/login') return next();
+    if (hasValidExtensionToken(req.headers['x-mp-token'] || req.query.mp_token)) return next();
     if (hasValidSession(req.headers.cookie)) return next();
     if (req.method === 'GET' && (req.headers.accept || '').includes('text/html')) {
       return res.redirect('/login');
@@ -111,6 +122,7 @@ if (authEnabled) {
 
   io.use((socket, next) => {
     if (isLoopback(socket.handshake.address)) return next();
+    if (hasValidExtensionToken(socket.handshake.auth?.token)) return next();
     if (hasValidSession(socket.handshake.headers.cookie)) return next();
     next(new Error('unauthorized'));
   });

@@ -91,12 +91,13 @@ By default the server has **no authentication and no encryption** — fine on a 
 ```bash
 export MP_AUTH_USER=yourusername
 export MP_AUTH_PASS=yourpassword
+export MP_EXTENSION_TOKEN=some-long-random-string
 export MP_TLS_CERT=/path/to/cert.pem
 export MP_TLS_KEY=/path/to/key.pem
 node server.js
 ```
 
-- **Login**: with `MP_AUTH_USER`/`MP_AUTH_PASS` set, anyone connecting from outside the machine is redirected to a login page (`/login`) and gets a session cookie on success. Connections from `localhost` (the ST extension, running on the same machine as the server) are always exempt — they don't need credentials.
+- **Login**: with `MP_AUTH_USER`/`MP_AUTH_PASS` set, anyone connecting from outside the machine is redirected to a login page (`/login`) and gets a session cookie on success. Connections from `localhost` are exempt, but note that's usually *not* what the ST extension is — the extension runs inside whatever browser is displaying the tavern, and that's normally a different machine than the server even when the tavern and this relay server run on the same box (e.g. you're viewing the tavern through an SSH tunnel). For the extension, set `MP_EXTENSION_TOKEN` to a random shared secret here, and put the exact same value in `AUTH_TOKEN` near the top of `extension/index.js` — that lets it connect without going through the login page.
 - **TLS**: with `MP_TLS_CERT`/`MP_TLS_KEY` set to a certificate + key file, the server switches to HTTPS/WSS. A free self-signed certificate (no domain needed) works fine — generate one with:
   ```bash
   openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
@@ -104,9 +105,9 @@ node server.js
     -subj "/CN=sillytavern-mp" \
     -addext "subjectAltName=IP:127.0.0.1,IP:your.server.ip"
   ```
-  Browsers will show a "connection is not private" warning on first visit since it's not signed by a public CA — click through it once (same trade-off any self-hosted panel with a self-signed cert has). If the server is TLS-only, remember to point the extension's `TARGET_URL` at `https://localhost:3000` too, and visit that URL once in the same browser as your SillyTavern tab to accept the certificate there as well.
+  Browsers will show a "connection is not private" warning on first visit since it's not signed by a public CA — click through it once (same trade-off any self-hosted panel with a self-signed cert has). If the server is TLS-only, remember to point the extension's `TARGET_URL` at `https://` instead of `http://` too.
 
-Both settings work independently — you can enable just the login, just TLS, or both.
+Both settings work independently — you can enable just the login, just TLS, or both. When both the tavern and this server run on the same VPS (rather than the tavern running on your own PC), set the extension's `TARGET_URL` to the server's public HTTPS address, same as what players use — there's no need to reach it through localhost or an SSH tunnel.
 
 ## Controls
 

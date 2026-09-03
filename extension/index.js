@@ -4,6 +4,13 @@ import { eventSource, event_types, is_send_press } from "../../../../script.js";
 import { user_avatar } from "../../../personas.js";
 
 const TARGET_URL = 'http://localhost:3000';
+// If the server has a login enabled (MP_AUTH_USER/MP_AUTH_PASS), it also
+// needs MP_EXTENSION_TOKEN set to some shared secret — put the same value
+// here so the extension can connect without a browser login. The extension
+// runs inside whatever browser is displaying the tavern, which is usually a
+// different machine than the server even when they're on the same VPS, so
+// it can't rely on being treated as a trusted local connection.
+const AUTH_TOKEN = '';
 
 let socket = null;
 let lastChatStr = '';
@@ -20,7 +27,7 @@ function boot() {
   hookToastr();
 
   const script = document.createElement('script');
-  script.src = TARGET_URL + '/socket.io/socket.io.js';
+  script.src = TARGET_URL + '/socket.io/socket.io.js' + (AUTH_TOKEN ? `?mp_token=${encodeURIComponent(AUTH_TOKEN)}` : '');
   script.onload = () => {
     console.log('[MP] socket.io client loaded');
     connectSocket();
@@ -40,6 +47,7 @@ function connectSocket() {
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
+    auth: AUTH_TOKEN ? { token: AUTH_TOKEN } : undefined,
   });
 
   socket.on('connect', () => {
@@ -111,7 +119,7 @@ function pushChatHistory() {
       // HTTP fallback
       fetch(TARGET_URL + '/set-chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(AUTH_TOKEN ? { 'X-MP-Token': AUTH_TOKEN } : {}) },
         body: str,
       }).catch(e => console.error('[MP] HTTP push failed:', e));
     }
@@ -523,7 +531,9 @@ function startHttpPolling() {
   console.log('[MP] Starting HTTP polling fallback');
   setInterval(() => {
     pushChatHistory();
-    fetch(TARGET_URL + '/queued-messages')
+    fetch(TARGET_URL + '/queued-messages', {
+      headers: AUTH_TOKEN ? { 'X-MP-Token': AUTH_TOKEN } : {},
+    })
       .then(r => r.json())
       .then(data => {
         if (data && data.length) data.forEach(cmd => queueCommand(cmd));

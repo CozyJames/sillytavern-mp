@@ -194,9 +194,31 @@ async function pushSessionInfo() {
 // ──────────── Generation status (visible to all players) ────────────
 
 let lastReportedGenerating = false;
+let pendingGenTimer = null;
 
+// Debounce the "generating" ON edge: SillyTavern's own chat-load / character-
+// switch routines (openCharacterChat, /go) can pulse GENERATION_STARTED for
+// a moment without a real LLM call happening, which otherwise flashes a
+// bogus "X is generating…" banner for everyone. The OFF edge stays instant
+// so a real stop/end is never delayed.
 function setGenerating(generating) {
-  lastReportedGenerating = generating;
+  if (pendingGenTimer) {
+    clearTimeout(pendingGenTimer);
+    pendingGenTimer = null;
+  }
+  if (!generating) {
+    lastReportedGenerating = false;
+    emitGenerating(false);
+    return;
+  }
+  pendingGenTimer = setTimeout(() => {
+    pendingGenTimer = null;
+    lastReportedGenerating = true;
+    emitGenerating(true);
+  }, 300);
+}
+
+function emitGenerating(generating) {
   if (!socket || !socket.connected) return;
   const ctx = getContext();
   socket.emit('generation-status', {
@@ -276,6 +298,7 @@ function executeCommand(cmd) {
     case 'switch-character': handleSwitchCharacter(cmd.characterId); break;
     case 'new-chat':         handleNewChat(); break;
     case 'load-chat':        handleLoadChat(cmd.fileName); break;
+    case 'delete-chat':      handleDeleteChat(cmd.fileName); break;
     case 'list-chats':       handleListChats(); break;
     default: console.warn('[MP] Unknown command:', cmd.type);
   }
@@ -491,6 +514,39 @@ async function handleLoadChat(fileName) {
   lastSessionStr = '';
   pushChatHistory();
   pushSessionInfo();
+}
+
+// ──────────── Delete a past chat (native REST endpoint — no STscript equivalent) ────────────
+
+async function handleDeleteChat(fileName) {
+  console.log('[MP] Delete chat:', fileName);
+  if (!fileName) return;
+  const ctx = getContext();
+  try {
+    if (!ctx.groupId && ctx.characterId !== undefined && ctx.characters[ctx.characterId]) {
+      const avatar = ctx.characters[ctx.characterId].avatar;
+      const res = await fetch('/api/chats/delete', {
+        method: 'POST',
+        headers: ctx.getRequestHeaders(),
+        body: JSON.stringify({ chatfile: fileName, avatar_url: avatar }),
+      });
+      if (!res.ok) console.error('[MP] delete-chat failed:', res.status);
+    }
+  } catch (e) {
+    console.error('[MP] delete-chat failed:', e);
+  }
+
+  // If the deleted file was the one currently open, start a fresh chat so
+  // nothing is left pointing at a file that no longer exists.
+  if (fileName === ctx.chatId) {
+    await handleNewChat();
+  } else {
+    lastChatStr = '';
+    lastSessionStr = '';
+    pushChatHistory();
+    pushSessionInfo();
+  }
+  handleListChats();
 }
 
 // ──────────── List past chats for the current character ────────────

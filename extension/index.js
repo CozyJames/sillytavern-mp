@@ -1,6 +1,6 @@
 // SillyTavern Multiplayer Extension (WebSocket version)
 import { getContext } from "../../../extensions.js";
-import { eventSource, event_types } from "../../../../script.js";
+import { eventSource, event_types, is_send_press } from "../../../../script.js";
 import { user_avatar } from "../../../personas.js";
 
 const TARGET_URL = 'http://localhost:3000';
@@ -48,6 +48,13 @@ function connectSocket() {
     lastSessionStr = '';
     pushChatHistory();
     pushSessionInfo();
+    // Announce the real current generation state on every (re)connect.
+    // Without this, a server that cached "generating: true" from a session
+    // that dropped mid-generation (tab closed, network blip) would keep
+    // showing that forever to every future client — nothing else corrects
+    // it, since setGenerating() is otherwise only called by event listeners.
+    console.log('[MP] Reporting current generation state on connect:', is_send_press);
+    setGenerating(is_send_press);
   });
 
   socket.on('disconnect', () => {
@@ -57,7 +64,16 @@ function connectSocket() {
   // ── Receive commands from web clients instantly ──
   socket.on('command', (cmd) => {
     console.log('[MP] Received command:', cmd.type || 'message');
-    queueCommand(cmd);
+    // Only commands that actually trigger/extend AI generation need to be
+    // serialized against each other (so two players' /trigger calls can't
+    // race). Everything else — stop, delete, edit, switching chats, etc. —
+    // runs immediately: queuing it behind a prior message's cooldown would
+    // make e.g. Stop or Delete sit unresponsive for up to 10 seconds.
+    if (GENERATION_COMMAND_TYPES.has(cmd.type || 'message')) {
+      queueCommand(cmd);
+    } else {
+      executeCommand(cmd);
+    }
   });
 
   // Start pushing chat history + session info
@@ -169,7 +185,10 @@ async function pushSessionInfo() {
 
 // ──────────── Generation status (visible to all players) ────────────
 
+let lastReportedGenerating = false;
+
 function setGenerating(generating) {
+  lastReportedGenerating = generating;
   if (!socket || !socket.connected) return;
   const ctx = getContext();
   socket.emit('generation-status', {
@@ -177,6 +196,19 @@ function setGenerating(generating) {
     characterName: ctx.name2 || null,
   });
 }
+
+// Belt-and-braces reconciliation: SillyTavern's GENERATION_STARTED/STOPPED/
+// ENDED events are the normal signal, but an aborted/errored generation can
+// occasionally leave them out of sync with the real is_send_press state
+// (observed after a programmatic /stop mid-stream, which can throw inside
+// ST's own generation pipeline before it gets to emit GENERATION_ENDED).
+// Polling catches and self-heals any such drift within a couple of seconds
+// instead of leaving every player's input stuck disabled indefinitely.
+setInterval(() => {
+  if (is_send_press !== lastReportedGenerating) {
+    setGenerating(is_send_press);
+  }
+}, 2000);
 
 // ──────────── Errors (relayed from ST's own toast notifications) ────────────
 
@@ -201,6 +233,11 @@ function hookToastr() {
 
 // ──────────── Command processing ────────────
 
+// Only these actually start/extend a generation, so only these need to wait
+// their turn behind one another. Everything else executes immediately (see
+// the 'command' socket handler above).
+const GENERATION_COMMAND_TYPES = new Set(['message', 'swipe', 'regenerate', 'continue']);
+
 function queueCommand(cmd) {
   commandQueue.push(cmd);
   if (!processing) processNext();
@@ -211,9 +248,7 @@ function processNext() {
   processing = true;
   const cmd = commandQueue.shift();
   executeCommand(cmd);
-  const delay = cmd.type === 'message' ? 10000
-    : (cmd.type === 'new-chat' || cmd.type === 'switch-character' || cmd.type === 'load-chat') ? 3000
-    : 1500;
+  const delay = cmd.type === 'message' ? 10000 : 1500;
   setTimeout(processNext, delay);
 }
 

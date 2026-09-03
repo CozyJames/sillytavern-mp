@@ -84,6 +84,30 @@ For friends to connect remotely, you need to expose the server. Options:
 
 Your SillyTavern instance stays local — only the server needs to be reachable. Note that avatars are loaded directly from your SillyTavern instance's origin, so if you only tunnel the multiplayer server, avatar images won't load for remote players.
 
+### Securing a publicly exposed server
+
+By default the server has **no authentication and no encryption** — fine on a private LAN/VPN, not fine on the open internet. Set these environment variables before starting it to require a login and serve over HTTPS:
+
+```bash
+export MP_AUTH_USER=yourusername
+export MP_AUTH_PASS=yourpassword
+export MP_TLS_CERT=/path/to/cert.pem
+export MP_TLS_KEY=/path/to/key.pem
+node server.js
+```
+
+- **Login**: with `MP_AUTH_USER`/`MP_AUTH_PASS` set, anyone connecting from outside the machine is redirected to a login page (`/login`) and gets a session cookie on success. Connections from `localhost` (the ST extension, running on the same machine as the server) are always exempt — they don't need credentials.
+- **TLS**: with `MP_TLS_CERT`/`MP_TLS_KEY` set to a certificate + key file, the server switches to HTTPS/WSS. A free self-signed certificate (no domain needed) works fine — generate one with:
+  ```bash
+  openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+    -keyout key.pem -out cert.pem \
+    -subj "/CN=sillytavern-mp" \
+    -addext "subjectAltName=IP:127.0.0.1,IP:your.server.ip"
+  ```
+  Browsers will show a "connection is not private" warning on first visit since it's not signed by a public CA — click through it once (same trade-off any self-hosted panel with a self-signed cert has). If the server is TLS-only, remember to point the extension's `TARGET_URL` at `https://localhost:3000` too, and visit that URL once in the same browser as your SillyTavern tab to accept the certificate there as well.
+
+Both settings work independently — you can enable just the login, just TLS, or both.
+
 ## Controls
 
 | Action | Shortcut |

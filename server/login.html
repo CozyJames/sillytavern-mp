@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in — SillyTavern MP</title>
+  <style>
+    :root {
+      --bg-0: #0f0f11;
+      --bg-2: #1f1f25;
+      --bg-3: #111318;
+      --text-primary: #e4e4e7;
+      --text-dim: #a1a1aa;
+      --text-muted: #71717a;
+      --text-accent: #93c5fd;
+      --text-title: #f8fafc;
+      --border: #2a2a31;
+      --border-hover: #3f3f46;
+      --blue: #3b82f6;
+      --blue-dim: rgba(59,130,246,0.15);
+      --red: #ef4444;
+      --red-dim: rgba(239,68,68,0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 10px rgba(0,0,0,0.4);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%; margin: 0;
+      font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg-0);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%; max-width: 340px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px 28px;
+    }
+    .icon {
+      width: 48px; height: 48px; margin: 0 auto 16px;
+      background: var(--blue-dim); border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    h1 {
+      font-size: 18px; font-weight: 600; color: var(--text-title);
+      text-align: center; margin: 0 0 4px;
+    }
+    .subtitle {
+      font-size: 13px; color: var(--text-muted);
+      text-align: center; margin: 0 0 24px;
+    }
+    label {
+      display: block; font-size: 12px; color: var(--text-dim);
+      margin: 0 0 6px;
+    }
+    .field { margin-bottom: 14px; }
+    input {
+      width: 100%; padding: 10px 12px;
+      background: var(--bg-3); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text-primary);
+      font-size: 14px; outline: none; transition: border 0.15s;
+      font-family: inherit;
+    }
+    input:focus { border-color: var(--blue); }
+    button {
+      width: 100%; margin-top: 6px;
+      background: var(--blue); color: white; border: none;
+      border-radius: var(--radius-sm); padding: 11px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: background 0.15s; font-family: inherit;
+    }
+    button:hover { background: #2563eb; }
+    .error {
+      display: none;
+      background: var(--red-dim); border: 1px solid var(--red);
+      color: #fca5a5; font-size: 13px;
+      border-radius: var(--radius-sm); padding: 9px 12px;
+      margin-bottom: 16px;
+    }
+    .error.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🎭</div>
+    <h1>SillyTavern MP</h1>
+    <p class="subtitle">Sign in to join the session</p>
+    <div class="error" id="error">Wrong username or password.</div>
+    <form method="POST" action="/login">
+      <div class="field">
+        <label for="user">Username</label>
+        <input type="text" id="user" name="user" autocomplete="username" autofocus required />
+      </div>
+      <div class="field">
+        <label for="pass">Password</label>
+        <input type="password" id="pass" name="pass" autocomplete="current-password" required />
+      </div>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+  <script>
+    if (new URLSearchParams(location.search).get('error')) {
+      document.getElementById('error').classList.add('show');
+    }
+  </script>
+</body>
+</html>

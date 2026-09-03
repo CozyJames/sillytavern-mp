@@ -192,6 +192,12 @@ io.on('connection', (socket) => {
   // ── Heartbeat ──
   socket.on('heartbeat', ({ name }) => {
     if (!name) return;
+    // A client's resolved name can change after connecting (persona list
+    // loads after the first heartbeat as "Guest", or they switch persona) —
+    // drop the stale entry instead of leaving it to linger until it times out.
+    if (socket.data.name && socket.data.name !== name) {
+      onlineUsers.delete(socket.data.name);
+    }
     socket.data.name = name;
     onlineUsers.set(name, Date.now());
     broadcastOnline();

@@ -362,6 +362,29 @@
       transition: all 0.15s; margin-bottom: 8px;
     }
     .panel-btn:hover { background: var(--blue-dim); border-color: var(--blue); color: var(--text-accent); }
+
+    /* ═══════ CONFIRM MODAL ═══════ */
+    #confirm-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+      z-index: 299; display: none; align-items: center; justify-content: center;
+    }
+    #confirm-backdrop.open { display: flex; }
+    #confirm-box {
+      width: 100%; max-width: 340px; margin: 20px;
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 20px;
+    }
+    #confirm-text { font-size: 14px; color: var(--text-primary); line-height: 1.5; margin: 0 0 18px; }
+    #confirm-bar { display: flex; gap: 8px; justify-content: flex-end; }
+    #confirm-bar button {
+      padding: 8px 18px; border-radius: var(--radius-sm); border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+    }
+    #confirm-ok { background: var(--blue); color: white; }
+    #confirm-ok:hover { background: #2563eb; }
+    #confirm-cancel { background: var(--border-hover); color: var(--text-dim); }
+    #confirm-cancel:hover { background: #52525b; }
   </style>
 </head>
 <body>
@@ -391,6 +414,16 @@
       </div>
       <button id="send-btn" title="Send (Enter)">Send</button>
       <div class="input-hint">Enter — send · Shift+Enter — new line · Ctrl+Enter — regenerate</div>
+    </div>
+  </div>
+
+  <div id="confirm-backdrop">
+    <div id="confirm-box">
+      <p id="confirm-text"></p>
+      <div id="confirm-bar">
+        <button id="confirm-cancel">Cancel</button>
+        <button id="confirm-ok">OK</button>
+      </div>
     </div>
   </div>
 
@@ -606,6 +639,33 @@
     }
 
     // ═══════════════════════════════════
+    //  CONFIRM MODAL (replaces native confirm() — no URL in the popup)
+    // ═══════════════════════════════════
+
+    function askConfirm(text) {
+      const backdrop = document.getElementById('confirm-backdrop');
+      document.getElementById('confirm-text').textContent = text;
+      backdrop.classList.add('open');
+      return new Promise((resolve) => {
+        function done(result) {
+          backdrop.classList.remove('open');
+          okBtn.removeEventListener('click', onOk);
+          cancelBtn.removeEventListener('click', onCancel);
+          backdrop.removeEventListener('click', onBackdrop);
+          resolve(result);
+        }
+        const okBtn = document.getElementById('confirm-ok');
+        const cancelBtn = document.getElementById('confirm-cancel');
+        function onOk() { done(true); }
+        function onCancel() { done(false); }
+        function onBackdrop(e) { if (e.target === backdrop) done(false); }
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        backdrop.addEventListener('click', onBackdrop);
+      });
+    }
+
+    // ═══════════════════════════════════
     //  SESSION PANEL
     // ═══════════════════════════════════
 
@@ -646,8 +706,8 @@
         name.textContent = c.name;
         item.appendChild(name);
         if (!isActive) {
-          item.addEventListener('click', () => {
-            if (!confirm(`Switch the shared session to "${c.name}"? This changes the chat for everyone.`)) return;
+          item.addEventListener('click', async () => {
+            if (!(await askConfirm(`Switch the shared session to "${c.name}"? This changes the chat for everyone.`))) return;
             sendCmd({ type: 'switch-character', characterId: c.id }, `↪ Switching to ${c.name}…`);
             closePanel();
           });
@@ -680,8 +740,8 @@
         info.appendChild(sub);
         item.appendChild(info);
         if (!isActive) {
-          item.addEventListener('click', () => {
-            if (!confirm(`Load chat "${c.fileName}" for everyone?`)) return;
+          item.addEventListener('click', async () => {
+            if (!(await askConfirm(`Load chat "${c.fileName}" for everyone?`))) return;
             sendCmd({ type: 'load-chat', fileName: c.fileName }, `📂 Loading ${c.fileName}…`);
             closePanel();
           });
@@ -689,9 +749,9 @@
         const delBtn = document.createElement('button');
         delBtn.className = 'action-btn danger'; delBtn.innerHTML = '🗑'; delBtn.title = 'Delete chat';
         delBtn.style.flexShrink = '0';
-        delBtn.onclick = (e) => {
+        delBtn.onclick = async (e) => {
           e.stopPropagation();
-          if (!confirm(`Delete chat "${c.fileName}" for everyone? This cannot be undone.`)) return;
+          if (!(await askConfirm(`Delete chat "${c.fileName}" for everyone? This cannot be undone.`))) return;
           sendCmd({ type: 'delete-chat', fileName: c.fileName }, `🗑 Deleting ${c.fileName}…`);
         };
         item.appendChild(delBtn);
@@ -699,8 +759,8 @@
       }
     }
 
-    document.getElementById('new-chat-btn').addEventListener('click', () => {
-      if (!confirm('Start a new chat for everyone? The current chat is kept in history.')) return;
+    document.getElementById('new-chat-btn').addEventListener('click', async () => {
+      if (!(await askConfirm('Start a new chat for everyone? The current chat is kept in history.'))) return;
       sendCmd({ type: 'new-chat' }, '＋ Starting new chat…');
       closePanel();
     });
@@ -878,8 +938,8 @@
         actions.appendChild(editBtn);
         const delBtn = document.createElement("button"); delBtn.className = "action-btn danger";
         delBtn.innerHTML = "🗑"; delBtn.title = "Delete";
-        delBtn.onclick = () => {
-          if (!confirm("Delete this message for everyone?")) return;
+        delBtn.onclick = async () => {
+          if (!(await askConfirm("Delete this message for everyone?"))) return;
           sendCmd({ type: "delete", index: rawIndex }, "🗑 Deleting…");
         };
         actions.appendChild(delBtn);

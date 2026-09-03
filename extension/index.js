@@ -3,14 +3,19 @@ import { getContext } from "../../../extensions.js";
 import { eventSource, event_types, is_send_press } from "../../../../script.js";
 import { user_avatar } from "../../../personas.js";
 
-const TARGET_URL = 'http://localhost:3000';
-// If the server has a login enabled (MP_AUTH_USER/MP_AUTH_PASS), it also
-// needs MP_EXTENSION_TOKEN set to some shared secret — put the same value
-// here so the extension can connect without a browser login. The extension
-// runs inside whatever browser is displaying the tavern, which is usually a
-// different machine than the server even when they're on the same VPS, so
-// it can't rely on being treated as a trusted local connection.
-const AUTH_TOKEN = '';
+// Deployment-specific values live in config.local.js (gitignored) so a
+// `git pull` never conflicts with your local TARGET_URL/AUTH_TOKEN edits.
+// Copy config.local.example.js to config.local.js and fill it in there —
+// these two are just the fallback for a fresh, unconfigured checkout.
+let TARGET_URL = 'http://localhost:3000';
+let AUTH_TOKEN = '';
+try {
+  const cfg = await import('./config.local.js');
+  if (cfg.TARGET_URL) TARGET_URL = cfg.TARGET_URL;
+  if (cfg.AUTH_TOKEN) AUTH_TOKEN = cfg.AUTH_TOKEN;
+} catch (e) {
+  console.warn('[MP] No config.local.js found, using defaults:', TARGET_URL);
+}
 
 let socket = null;
 let lastChatStr = '';

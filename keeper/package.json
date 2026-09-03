@@ -1,0 +1,9 @@
+{
+  "name": "sillytavern-mp-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "main": "keeper.js",
+  "dependencies": {
+    "puppeteer-core": "^23.0.0"
+  }
+}

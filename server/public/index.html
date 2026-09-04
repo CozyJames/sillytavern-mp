@@ -73,9 +73,14 @@
     }
     #online-users { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
     .bar-spacer { flex: 1 1 auto; }
-    .context-meter { font-size: 12.5px; font-weight: 600; color: var(--text-muted); opacity: 0.85; white-space: nowrap; }
-    .context-meter.warn { color: var(--amber); opacity: 1; }
-    .context-meter.crit { color: var(--red); opacity: 1; }
+    .context-meter { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+    .context-meter-bar { width: 50px; height: 4px; border-radius: 2px; background: var(--bg-3); overflow: hidden; }
+    .context-meter-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; }
+    .context-meter-text { opacity: 0.85; }
+    .context-meter.warn .context-meter-text { color: var(--amber); opacity: 1; }
+    .context-meter.warn .context-meter-fill { background: var(--amber); }
+    .context-meter.crit .context-meter-text { color: var(--red); opacity: 1; }
+    .context-meter.crit .context-meter-fill { background: var(--red); }
     .icon-btn {
       background: none; border: none; color: var(--text-primary);
       width: 30px; height: 30px; border-radius: var(--radius-sm); cursor: pointer;
@@ -297,13 +302,17 @@
       box-shadow: var(--shadow);
       display: flex; align-items: center; gap: 6px;
     }
+    /* A native <select> can't render an avatar image inside itself, so
+       trying to make this look like a circular avatar button (an earlier
+       version of this) just produced an unlabeled blank circle — a real
+       control with nothing indicating what it does. Plain and visible beats
+       cute and invisible: shows the persona name outright. */
     #persona-select {
-      width: 36px; height: 36px; flex-shrink: 0;
-      padding: 0; background: var(--bg-3);
-      border: 1px solid var(--border); border-radius: 50%;
-      color: var(--text-primary); font-size: 0; outline: none;
-      font-family: inherit; text-align: center; cursor: pointer;
-      appearance: none; -webkit-appearance: none;
+      max-width: 110px; flex-shrink: 0; height: 36px;
+      padding: 0 8px; background: var(--bg-3);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--text-primary); font-size: 13px; outline: none;
+      font-family: inherit; cursor: pointer;
     }
     #persona-select:focus { border-color: var(--accent); }
     #message {
@@ -415,7 +424,10 @@
     <div class="dot-online" id="conn-dot"></div>
     <div id="online-users">—</div>
     <div class="bar-spacer"></div>
-    <div class="context-meter" id="context-meter" title="Estimated chat tokens vs. max context" hidden></div>
+    <div class="context-meter" id="context-meter" title="Estimated chat tokens vs. max context" hidden>
+      <span class="context-meter-text" id="context-meter-text">– / –</span>
+      <div class="context-meter-bar"><div class="context-meter-fill" id="context-meter-fill" style="width:0%"></div></div>
+    </div>
     <button class="icon-btn" id="session-btn" title="Session (character, chats)">☰</button>
   </div>
 
@@ -671,7 +683,8 @@
       const used = info.contextTokens || 0;
       const max = info.maxContext;
       const pct = Math.min(100, Math.round((used / max) * 100));
-      el.textContent = `${used.toLocaleString()} / ${max.toLocaleString()}`;
+      document.getElementById('context-meter-text').textContent = `${used.toLocaleString()} / ${max.toLocaleString()}`;
+      document.getElementById('context-meter-fill').style.width = pct + '%';
       el.classList.toggle('warn', pct >= 75 && pct < 90);
       el.classList.toggle('crit', pct >= 90);
     }

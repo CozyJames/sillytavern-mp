@@ -47,6 +47,8 @@ curl -fsSL https://raw.githubusercontent.com/CozyJames/sillytavern-mp/master/dep
 
 Both are safe to re-run (they update the existing checkout rather than re-cloning). To remove everything either one set up: `bash deploy/uninstall.sh` from inside the checkout (never touches SillyTavern, Node, or Chromium — only this project's own services/files, and only the checkout itself if you confirm).
 
+Day-to-day VPS ops (updating, restarting, logs, common errors): [`deploy/README.md`](deploy/README.md).
+
 ### Manual setup
 
 ### 1. Install the extension

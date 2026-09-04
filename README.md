@@ -26,6 +26,7 @@ Based on [LiamDobbelaere/sillytavern-mp](https://github.com/LiamDobbelaere/silly
 1. The **extension** runs inside SillyTavern on the host's machine
 2. The **server** relays chat history, session state (characters/personas/chats/tokens) and commands between the extension and web clients via WebSocket
 3. The **web client** is a lightweight frontend where players manage the session and send messages
+4. On a VPS, [**keeper**](keeper/README.md) is a headless browser tab that keeps the extension connected 24/7 without a real browser open
 
 When a player sends a message, the extension runs it through SillyTavern's STscript engine (`/persona-set`, `/send`, `/trigger`, `/swipe`, `/regenerate`, `/cut`, `/go`, `/newchat`) — the same commands you'd type into the tavern yourself — so it behaves exactly like a normal user action, no DOM click simulation involved.
 
@@ -109,11 +110,11 @@ Your SillyTavern instance stays local — only the server needs to be reachable.
 
 If you view/manage SillyTavern directly through your own tunnel (`ssh -L 8000:127.0.0.1:8000 ...`), that's a **separate** browser session from the one the mp-extension actually runs in — `keeper`'s own headless tab. SillyTavern has no live sync between separate browser tabs, so a new preset, character, etc. added through your tunnel won't show up for the mp-extension/web client until keeper's tab reloads.
 
-The installer sets `ST_DATA_PATH` for the keeper service, pointing at your SillyTavern user's data folder. With that set, keeper watches it and reloads its tab automatically — within a few seconds — whenever you add/edit a preset, character, world info, or persona. It deliberately does **not** watch the chat log folders, since those get written on every single message during normal play — watching them would reload the tab constantly and break live sessions. As a fallback (e.g. if `ST_DATA_PATH` isn't set, or something slips past the watched folders), it still reloads every 30 minutes on its own, or immediately if you restart it:
+The installer sets `ST_DATA_PATH` for the keeper service, pointing at your SillyTavern user's data folder. With that set, keeper watches it and reloads its tab automatically — within a few seconds — whenever you add/edit a preset, character, world info, or persona, without touching the chat log folders (see [`keeper/README.md`](keeper/README.md) for exactly what's watched, why, and every config option). As a fallback, it still reloads every 30 minutes on its own regardless, or immediately if you restart it:
 ```bash
 sudo systemctl restart tavern-keeper
 ```
-Existing installs: re-run the installer (or add `Environment=ST_DATA_PATH=/path/to/SillyTavern/data/default-user` to `/etc/systemd/system/tavern-keeper.service` yourself, then `sudo systemctl daemon-reload && sudo systemctl restart tavern-keeper`) to pick up automatic reloading.
+Existing installs: re-run the installer, or see [`deploy/README.md`](deploy/README.md) to set `ST_DATA_PATH` by hand.
 
 ### Securing a publicly exposed server
 

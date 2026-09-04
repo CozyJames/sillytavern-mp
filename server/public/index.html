@@ -99,7 +99,10 @@
 
     /* Flat message rows — ST's own .mes anatomy: avatar + [name / text],
        no card background, no bubble, no per-message shadow. */
-    .message { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px 8px; position: relative; }
+    .message {
+      display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px 8px; position: relative;
+      background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); margin: 2px 8px;
+    }
 
     /* ═══════ AVATAR ═══════ */
     .avatar {
@@ -115,7 +118,8 @@
     /* ═══════ MESSAGE BODY ═══════ */
     .bubble-wrap { display: flex; flex-direction: column; min-width: 0; flex: 1; }
     .bubble { position: relative; }
-    .msg-title { font-weight: bolder; font-size: 15px; }
+    .msg-head { display: flex; align-items: center; gap: 8px; }
+    .msg-title { font-weight: bolder; font-size: 15px; flex: 1; min-width: 0; }
     .message.bot .msg-title { color: var(--text-accent); }
     .message.user.ghost { opacity: 0.55; }
 
@@ -135,7 +139,10 @@
     /* Always rendered (not hover-gated) — hover-only is unreachable on
        touch, which is most real usage of this client. Faded idle, full
        opacity on hover/focus. */
-    .msg-actions { position: absolute; top: 4px; right: 8px; display: flex; gap: 2px; z-index: 2; opacity: 0.35; transition: opacity 0.15s; }
+    /* Sits in the name row now, not absolute-overlaid on the whole
+       message — it used to float over whatever was at the top of the
+       bubble (e.g. a Thinking block), overlapping it. */
+    .msg-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0.35; transition: opacity 0.15s; }
     .message:hover .msg-actions, .message:focus-within .msg-actions { opacity: 1; }
     .action-btn {
       background: var(--bg-2); border: 1px solid var(--border); color: var(--text-muted);
@@ -156,7 +163,13 @@
       padding: 10px 12px; resize: vertical; outline: none;
       box-shadow: 0 0 0 3px var(--accent-dim);
     }
-    .edit-bar { display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end; }
+    /* Sticky, not just below a textarea that can grow past the viewport —
+       otherwise saving/cancelling a long edit means scrolling all the way down first. */
+    .edit-bar {
+      position: sticky; top: 4px; z-index: 3;
+      display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end;
+      background: var(--bg-1); padding: 4px; border-radius: var(--radius-sm);
+    }
     .edit-bar button {
       padding: 5px 16px; border-radius: var(--radius-sm); border: none;
       font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
@@ -185,7 +198,12 @@
     .mes-text p:last-child { margin-bottom: 0; }
     .mes-text em { font-style: italic; color: var(--text-muted); }
     .mes-text strong { font-weight: 700; }
-    .mes-text q { color: var(--text-accent); font-style: normal; quotes: none; }
+    /* No color here on purpose — SillyTavern's own rendered output already
+       carries whatever coloring the active preset/regex assigns per
+       character (often different colors per speaker); forcing one uniform
+       color here would override that. quotes:none just suppresses the
+       browser's default auto-inserted quote-mark glyphs. */
+    .mes-text q { font-style: normal; quotes: none; }
     .mes-text hr { border: none; border-top: 1px solid var(--border-hover); margin: 10px 0; }
     .mes-text blockquote { border-left: 3px solid var(--accent); margin: 6px 0; padding: 4px 12px; color: var(--text-dim); background: rgba(0,0,0,0.2); }
     .mes-text code { background: rgba(0,0,0,0.3); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
@@ -1024,9 +1042,27 @@
       const bw = document.createElement("div"); bw.className = "bubble-wrap";
       const bubble = document.createElement("div"); bubble.className = "bubble";
 
+      const head = document.createElement("div"); head.className = "msg-head";
       const title = document.createElement("div"); title.className = "msg-title";
       title.textContent = name;
-      bubble.appendChild(title);
+      head.appendChild(title);
+
+      if (rawIndex >= 0) {
+        const actions = document.createElement("div"); actions.className = "msg-actions";
+        const editBtn = document.createElement("button"); editBtn.className = "action-btn";
+        editBtn.innerHTML = "✎"; editBtn.title = "Edit";
+        editBtn.onclick = () => enterEdit(el, rawIndex, mes);
+        actions.appendChild(editBtn);
+        const delBtn = document.createElement("button"); delBtn.className = "action-btn danger";
+        delBtn.innerHTML = "🗑"; delBtn.title = "Delete";
+        delBtn.onclick = async () => {
+          if (!(await askConfirm("Delete this message for everyone?"))) return;
+          sendCmd({ type: "delete", index: rawIndex }, "🗑 Deleting…");
+        };
+        actions.appendChild(delBtn);
+        head.appendChild(actions);
+      }
+      bubble.appendChild(head);
 
       if (!is_user && reasoningHtml && reasoningHtml.trim()) {
         const details = document.createElement("details"); details.className = "thinking";
@@ -1048,23 +1084,6 @@
         mesDiv.innerHTML = formatMessage(mes);
       }
       bubble.appendChild(mesDiv);
-
-      // Message actions
-      if (rawIndex >= 0) {
-        const actions = document.createElement("div"); actions.className = "msg-actions";
-        const editBtn = document.createElement("button"); editBtn.className = "action-btn";
-        editBtn.innerHTML = "✎"; editBtn.title = "Edit";
-        editBtn.onclick = () => enterEdit(el, rawIndex, mes);
-        actions.appendChild(editBtn);
-        const delBtn = document.createElement("button"); delBtn.className = "action-btn danger";
-        delBtn.innerHTML = "🗑"; delBtn.title = "Delete";
-        delBtn.onclick = async () => {
-          if (!(await askConfirm("Delete this message for everyone?"))) return;
-          sendCmd({ type: "delete", index: rawIndex }, "🗑 Deleting…");
-        };
-        actions.appendChild(delBtn);
-        bubble.appendChild(actions);
-      }
 
       bw.appendChild(bubble);
 

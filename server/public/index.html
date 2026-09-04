@@ -91,13 +91,15 @@
     .icon-btn:hover { opacity: 1; filter: brightness(1.25); }
 
     /* ═══════ LOAD OLDER ═══════ */
-    #load-older-btn {
+    /* Shown only while actually fetching (triggered by scrolling to the
+       top edge — see the #chat scroll listener), not a standing button. */
+    #load-older-indicator {
       width: 100%; max-width: 960px; flex-shrink: 0;
-      padding: 8px; background: var(--bg-2); border: none; border-bottom: 1px solid var(--border);
-      color: var(--text-accent); font-size: 12.5px; cursor: pointer; opacity: 0.85;
+      padding: 8px; text-align: center;
+      color: var(--text-muted); font-size: 12px; font-style: italic;
+      display: none;
     }
-    #load-older-btn:hover { opacity: 1; }
-    #load-older-btn:disabled { opacity: 0.4; cursor: default; }
+    #load-older-indicator.active { display: block; }
 
     /* ═══════ CHAT ═══════ */
     #chat {
@@ -440,7 +442,7 @@
     <button class="icon-btn" id="session-btn" title="Session (character, chats)">☰</button>
   </div>
 
-  <button id="load-older-btn" hidden>↑ Load older messages</button>
+  <div id="load-older-indicator">Loading older messages…</div>
   <div id="chat"></div>
   <div id="toast-container"></div>
 
@@ -617,12 +619,13 @@
     });
 
     // ── Load older messages on demand (server keeps the full history, it
-    // just doesn't broadcast all of it on every live update) ──
-    document.getElementById('load-older-btn').addEventListener('click', () => {
+    // just doesn't broadcast all of it on every live update) — triggered
+    // by actually scrolling to the top edge, not a standing button. ──
+    function loadOlder() {
       if (loadingOlder || historyOffset <= 0) return;
       loadingOlder = true;
-      const btn = document.getElementById('load-older-btn');
-      btn.disabled = true;
+      const indicator = document.getElementById('load-older-indicator');
+      indicator.classList.add('active');
       const chatEl = document.getElementById('chat');
       const prevScrollHeight = chatEl.scrollHeight;
       socket.emit('load-older', { before: historyOffset }, (chunk) => {
@@ -634,8 +637,17 @@
         // position by exactly how much taller the chat got.
         chatEl.scrollTop += chatEl.scrollHeight - prevScrollHeight;
         loadingOlder = false;
-        btn.disabled = false;
+        indicator.classList.remove('active');
+        // The chat may still not fill the viewport after this chunk (a
+        // short window, or a small screen) — nothing to scroll means the
+        // 'scroll' listener below will never fire, so check directly.
+        if (historyOffset > 0 && chatEl.scrollHeight <= chatEl.clientHeight) loadOlder();
       });
+    }
+
+    document.getElementById('chat').addEventListener('scroll', () => {
+      const chatEl = document.getElementById('chat');
+      if (chatEl.scrollTop < 40) loadOlder();
     });
 
     // ── Command acknowledged ──
@@ -1088,7 +1100,6 @@
       }
 
       if (atBottom) chat.scrollTop = chat.scrollHeight;
-      document.getElementById('load-older-btn').hidden = historyOffset <= 0;
     }
 
     function renderMessage(msg, rawIndex, isLastBot) {

@@ -165,6 +165,13 @@ let generationStatus = { generating: false, characterName: null };
 const onlineUsers = new Map(); // name → timestamp
 const PRESENCE_TIMEOUT = 12_000;
 
+// Whichever socket sends 'chat-update' is, by definition, the extension —
+// web clients never emit that. Tracking it lets 'command' go straight to
+// the one socket that actually acts on it, instead of every connected
+// player's browser having to receive and ignore every other player's
+// commands too.
+let extensionSocketId = null;
+
 // The extension always pushes the FULL chat history (that traffic stays
 // local/same-box, it's cheap) — but re-broadcasting all of it to every
 // player's browser on every single change, especially the rapid-fire
@@ -193,6 +200,7 @@ io.on('connection', (socket) => {
 
   // ── Chat history from ST extension ──
   socket.on('chat-update', (data) => {
+    extensionSocketId = socket.id;
     chatHistory = data;
     // Broadcast to everyone EXCEPT the sender (extension)
     socket.broadcast.emit('chat-update', chatWindow());
@@ -208,6 +216,7 @@ io.on('connection', (socket) => {
 
   // ── Session info (characters/personas/current chat/tokens) from ST extension ──
   socket.on('session-info', (data) => {
+    extensionSocketId = socket.id;
     sessionInfo = data;
     socket.broadcast.emit('session-info', sessionInfo);
   });
@@ -239,8 +248,14 @@ io.on('connection', (socket) => {
   // ── Command from web client → forward to ST extension ──
   socket.on('command', (cmd) => {
     console.log('[WS] Command:', cmd.type || 'message');
-    // Broadcast to all (extension will pick it up)
-    io.emit('command', cmd);
+    if (extensionSocketId) {
+      io.to(extensionSocketId).emit('command', cmd);
+    } else {
+      // Extension hasn't been seen yet this run (fresh server start,
+      // reconnecting) — fall back to broadcasting so the command still
+      // has a chance of arriving once it does connect.
+      io.emit('command', cmd);
+    }
     // Ack back to sender with the command type
     socket.emit('command-ack', { type: cmd.type || 'message' });
   });
@@ -268,6 +283,7 @@ io.on('connection', (socket) => {
   // ── Disconnect ──
   socket.on('disconnect', () => {
     console.log(`[WS] Disconnected: ${socket.id}`);
+    if (socket.id === extensionSocketId) extensionSocketId = null;
     if (socket.data.name) {
       onlineUsers.delete(socket.data.name);
       broadcastOnline();

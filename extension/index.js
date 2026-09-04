@@ -88,19 +88,16 @@ function connectSocket() {
     }
   });
 
-  // Start pushing chat history + session info. Polling rate adapts to
-  // generation state: fast while something is actively streaming (so
-  // players watch it type live), much slower while idle — event listeners
-  // below already cover real changes (new/edited/deleted messages, chat
-  // switches), this is just the belt-and-braces catch-all for anything
-  // that slips through (mid-stream token updates don't fire discrete
-  // events), so there's no reason to run it at generation speed 24/7.
+  // Start pushing chat history + session info. This is a slow safety-net
+  // poll only — real changes (new/edited/deleted messages, chat switches)
+  // are covered by event listeners below, and mid-stream token updates are
+  // covered by the STREAM_TOKEN_RECEIVED hook (see below), which reacts to
+  // real activity instead of guessing an interval.
   schedulePoll();
 }
 
 function schedulePoll() {
-  const delay = is_send_press ? 700 : 6000;
-  setTimeout(() => { pushChatHistory(); schedulePoll(); }, delay);
+  setTimeout(() => { pushChatHistory(); schedulePoll(); }, 6000);
 }
 
 // ──────────── Push chat history to server ────────────
@@ -788,6 +785,23 @@ eventSource.on(event_types.MESSAGE_RECEIVED, () => {
   // Retry shortly after — DOM render can lag slightly behind this event
   setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 500);
 });
+
+// Fires on every streamed chunk during generation — debounced instead of
+// pushed on every single token (which can fire many times a second) so
+// players still watch it type live, without pushing far more often than
+// anyone could perceive. Real activity, not a guessed interval, drives
+// the rate — the old flat 700ms poll during generation is gone.
+if (event_types.STREAM_TOKEN_RECEIVED) {
+  let streamDebounceTimer = null;
+  eventSource.on(event_types.STREAM_TOKEN_RECEIVED, () => {
+    if (streamDebounceTimer) return;
+    streamDebounceTimer = setTimeout(() => {
+      streamDebounceTimer = null;
+      lastChatStr = '';
+      pushChatHistory();
+    }, 250);
+  });
+}
 
 // Fires once ST has actually painted the message into the DOM —
 // this is when .mes_text has the final rendered HTML available

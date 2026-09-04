@@ -90,6 +90,15 @@
     }
     .icon-btn:hover { opacity: 1; filter: brightness(1.25); }
 
+    /* ═══════ LOAD OLDER ═══════ */
+    #load-older-btn {
+      width: 100%; max-width: 960px; flex-shrink: 0;
+      padding: 8px; background: var(--bg-2); border: none; border-bottom: 1px solid var(--border);
+      color: var(--text-accent); font-size: 12.5px; cursor: pointer; opacity: 0.85;
+    }
+    #load-older-btn:hover { opacity: 1; }
+    #load-older-btn:disabled { opacity: 0.4; cursor: default; }
+
     /* ═══════ CHAT ═══════ */
     #chat {
       width: 100%; max-width: 960px;
@@ -431,6 +440,7 @@
     <button class="icon-btn" id="session-btn" title="Session (character, chats)">☰</button>
   </div>
 
+  <button id="load-older-btn" hidden>↑ Load older messages</button>
   <div id="chat"></div>
   <div id="toast-container"></div>
 
@@ -508,7 +518,10 @@
     //  STATE
     // ═══════════════════════════════════
 
-    let currentHistory = [];
+    let currentHistory = [];   // everything currently loaded, oldest first
+    let historyOffset = 0;     // absolute index (in ST's real chat array) of currentHistory[0]
+    let historyTotal = 0;      // total messages that exist server-side, including ones we haven't loaded
+    let loadingOlder = false;
     let pendingCommand = null; // tracks active command toast
     let sessionInfo = null;    // characters, personas, current chat/character, tokens
     let isGenerating = false;
@@ -578,14 +591,51 @@
     });
 
     // ── Receive chat updates instantly ──
-    socket.on('chat-update', (history) => {
-      currentHistory = history;
-      renderChat(history);
+    // The server only ever sends the live tail (not the whole, potentially
+    // huge, history) plus where that tail starts and how many messages
+    // exist in total. If we'd already loaded an older prefix ourselves
+    // (via "Load older messages") and nothing was deleted since, keep it
+    // and just refresh the tail; otherwise (first load, or a delete
+    // somewhere shifted indices) drop back to just the fresh tail — a
+    // delete is rare enough that resetting the scrollback view for it is
+    // an acceptable trade for not risking misaligned indices.
+    socket.on('chat-update', ({ messages, offset, total }) => {
+      const canKeepOlderPrefix = currentHistory.length > 0 && total >= historyTotal && offset <= historyOffset + currentHistory.length;
+      if (canKeepOlderPrefix && historyOffset < offset) {
+        currentHistory = [...currentHistory.slice(0, offset - historyOffset), ...messages];
+      } else {
+        currentHistory = messages;
+        historyOffset = offset;
+      }
+      historyTotal = total;
+      renderChat(currentHistory);
       // Clear pending command toast when chat updates
       if (pendingCommand) {
         dismissToast(pendingCommand);
         pendingCommand = null;
       }
+    });
+
+    // ── Load older messages on demand (server keeps the full history, it
+    // just doesn't broadcast all of it on every live update) ──
+    document.getElementById('load-older-btn').addEventListener('click', () => {
+      if (loadingOlder || historyOffset <= 0) return;
+      loadingOlder = true;
+      const btn = document.getElementById('load-older-btn');
+      btn.disabled = true;
+      const chatEl = document.getElementById('chat');
+      const prevScrollHeight = chatEl.scrollHeight;
+      socket.emit('load-older', { before: historyOffset }, (chunk) => {
+        currentHistory = [...chunk.messages, ...currentHistory];
+        historyOffset = chunk.offset;
+        renderChat(currentHistory);
+        // Keep the view visually still — we just prepended content above
+        // whatever the player was looking at, so compensate the scroll
+        // position by exactly how much taller the chat got.
+        chatEl.scrollTop += chatEl.scrollHeight - prevScrollHeight;
+        loadingOlder = false;
+        btn.disabled = false;
+      });
     });
 
     // ── Command acknowledged ──
@@ -1017,12 +1067,13 @@
       history.forEach((msg, i) => {
         if (!isVisible(msg)) return;
         const isLastBot = i === lastBotIdx;
-        const key = String(i);
+        const absIndex = historyOffset + i;
+        const key = String(absIndex);
         seen.add(key);
         const sig = messageSignature(msg, isLastBot);
         let node = existingByIndex.get(key);
         if (!node || node.dataset.sig !== sig) {
-          const fresh = renderMessage(msg, i, isLastBot);
+          const fresh = renderMessage(msg, absIndex, isLastBot);
           fresh.dataset.sig = sig;
           if (node) node.replaceWith(fresh);
           node = fresh;
@@ -1037,6 +1088,7 @@
       }
 
       if (atBottom) chat.scrollTop = chat.scrollHeight;
+      document.getElementById('load-older-btn').hidden = historyOffset <= 0;
     }
 
     function renderMessage(msg, rawIndex, isLastBot) {

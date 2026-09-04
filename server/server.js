@@ -165,12 +165,26 @@ let generationStatus = { generating: false, characterName: null };
 const onlineUsers = new Map(); // name → timestamp
 const PRESENCE_TIMEOUT = 12_000;
 
+// The extension always pushes the FULL chat history (that traffic stays
+// local/same-box, it's cheap) — but re-broadcasting all of it to every
+// player's browser on every single change, especially the rapid-fire
+// updates during streaming generation, means resending an ever-growing
+// payload (a long-running RP chat can be hundreds of messages) many times
+// a minute to everyone watching. Players only ever need to actually SEE
+// the tail live; older messages are fetched on demand (see 'load-older').
+const LIVE_WINDOW = 60;
+
+function chatWindow() {
+  const offset = Math.max(0, chatHistory.length - LIVE_WINDOW);
+  return { messages: chatHistory.slice(offset), offset, total: chatHistory.length };
+}
+
 // ──────────── Socket.IO ────────────
 io.on('connection', (socket) => {
   console.log(`[WS] Connected: ${socket.id}`);
 
   // Send current state to newly connected client
-  socket.emit('chat-update', chatHistory);
+  socket.emit('chat-update', chatWindow());
   if (sessionInfo) socket.emit('session-info', sessionInfo);
   socket.emit('generation-status', generationStatus);
 
@@ -181,7 +195,15 @@ io.on('connection', (socket) => {
   socket.on('chat-update', (data) => {
     chatHistory = data;
     // Broadcast to everyone EXCEPT the sender (extension)
-    socket.broadcast.emit('chat-update', chatHistory);
+    socket.broadcast.emit('chat-update', chatWindow());
+  });
+
+  // ── Web client asking for older messages than it currently has ──
+  socket.on('load-older', ({ before }, ack) => {
+    if (typeof ack !== 'function') return;
+    const end = Math.max(0, Math.min(before ?? 0, chatHistory.length));
+    const start = Math.max(0, end - LIVE_WINDOW);
+    ack({ messages: chatHistory.slice(start, end), offset: start });
   });
 
   // ── Session info (characters/personas/current chat/tokens) from ST extension ──

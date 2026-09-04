@@ -104,8 +104,8 @@
     /* ═══════ CHAT ═══════ */
     #chat {
       width: 100%; max-width: 960px;
-      flex: 1 1 auto;
-      padding: 4px 0 150px;
+      flex: 1 1 auto; min-height: 0;
+      padding: 4px 0 12px;
       overflow-y: auto;
       background: var(--bg-1);
     }
@@ -117,7 +117,7 @@
        no card background, no bubble, no per-message shadow. */
     .message {
       display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px 8px; position: relative;
-      background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); margin: 2px 8px;
+      background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); margin: 6px 8px;
     }
 
     /* ═══════ AVATAR ═══════ */
@@ -227,13 +227,17 @@
     .mes-text pre code { background: none; padding: 0; }
 
     /* ═══════ BOTTOM DOCK ═══════ */
+    /* A normal flex child at the end of body's column, not a fixed overlay
+       — #chat's flex:1 then fills exactly the space above it automatically
+       (and its own scrollbar stops exactly at the dock's top edge) as the
+       dock's height changes with the generating/typing indicators, instead
+       of #chat's box extending the full viewport height behind a
+       fixed-position dock and only LOOKING clear via bottom padding while
+       its actual (and its scrollbar's) box still ran underneath it. */
     #bottom-dock {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      margin: 0 auto; max-width: 960px;
+      width: 100%; max-width: 960px; flex-shrink: 0;
       display: flex; flex-direction: column;
-      pointer-events: none;
     }
-    #bottom-dock > * { pointer-events: auto; }
 
     /* ═══════ GENERATING / TYPING — inline muted text, like ST's own status line ═══════ */
     #generating-indicator {

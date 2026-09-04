@@ -264,28 +264,6 @@ function broadcastOnline() {
 // Prune stale users periodically
 setInterval(broadcastOnline, PRESENCE_TIMEOUT);
 
-// ──────────── HTTP fallback endpoints (backward compat) ────────────
-app.post('/set-chat', (req, res) => {
-  chatHistory = req.body;
-  io.emit('chat-update', chatHistory);
-  res.send('ok');
-});
-
-app.get('/get-chat', (_req, res) => {
-  res.json(chatHistory);
-});
-
-// Legacy queue endpoints (no longer primary, but kept for safety)
-let queuedMessages = [];
-app.post('/queue-message', (req, res) => {
-  queuedMessages.push(req.body);
-  res.send('ok');
-});
-app.get('/queued-messages', (_req, res) => {
-  res.json(queuedMessages);
-  queuedMessages = [];
-});
-
 // ──────────── Start ────────────
 server.listen(3000, '0.0.0.0', () => {
   console.log(`Server running on port 3000 (${useTls ? 'HTTPS' : 'HTTP'} + WebSocket, auth ${authEnabled ? 'ON' : 'OFF'})`);

@@ -38,8 +38,7 @@ function boot() {
     connectSocket();
   };
   script.onerror = () => {
-    console.warn('[MP] Failed to load socket.io, falling back to HTTP polling');
-    startHttpPolling();
+    console.error('[MP] Failed to load socket.io client from', TARGET_URL, '— is the MP server running and reachable?');
   };
   document.head.appendChild(script);
 }
@@ -147,26 +146,15 @@ function getEnrichedChat() {
 }
 
 function pushChatHistory() {
+  if (!socket || !socket.connected) return;
   const enriched = getEnrichedChat();
   const str = JSON.stringify(enriched);
   const changed = str !== lastChatStr;
   if (changed) {
     lastChatStr = str;
-    if (socket && socket.connected) {
-      socket.emit('chat-update', enriched);
-    } else {
-      // HTTP fallback
-      fetch(TARGET_URL + '/set-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(AUTH_TOKEN ? { 'X-MP-Token': AUTH_TOKEN } : {}) },
-        body: str,
-      }).catch(e => console.error('[MP] HTTP push failed:', e));
-    }
-  }
-
-  // Context/token usage depends on chat content, so refresh session info
-  // whenever the chat changes (also picks up new messages' token cost).
-  if (changed) {
+    socket.emit('chat-update', enriched);
+    // Context/token usage depends on chat content, so refresh session info
+    // whenever the chat changes (also picks up new messages' token cost).
     pushSessionInfo();
   }
 }
@@ -438,19 +426,7 @@ async function sendMessageAs(personaId, message) {
     console.log('[MP] Sent via STscript');
   } catch (e) {
     console.error('[MP] STscript send failed:', e);
-    sendMessageAsLegacy(personaId, message);
   }
-}
-
-function sendMessageAsLegacy(personaId, message) {
-  console.log('[MP] Falling back to legacy DOM method');
-  const ctx = getContext();
-  const personaName = ctx.powerUserSettings?.personas?.[personaId] || personaId;
-  $("#user_avatar_block .avatar-container").each((k, v) => {
-    if (v.innerText.toLowerCase().includes(String(personaName).toLowerCase())) v.click();
-  });
-  $("#send_textarea").val(message);
-  setTimeout(() => getContext().generate(), 1000);
 }
 
 // ──────────── Swipe ────────────
@@ -801,23 +777,6 @@ async function handleListChats() {
   if (socket && socket.connected) {
     socket.emit('chats-list', { characterId: ctx.characters[ctx.characterId]?.avatar ?? null, chats });
   }
-}
-
-// ──────────── HTTP fallback (if socket.io fails to load) ────────────
-
-function startHttpPolling() {
-  console.log('[MP] Starting HTTP polling fallback');
-  setInterval(() => {
-    pushChatHistory();
-    fetch(TARGET_URL + '/queued-messages', {
-      headers: AUTH_TOKEN ? { 'X-MP-Token': AUTH_TOKEN } : {},
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.length) data.forEach(cmd => queueCommand(cmd));
-      })
-      .catch(() => {});
-  }, 2000);
 }
 
 // ──────────── Init ────────────

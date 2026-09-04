@@ -4,6 +4,7 @@
   "private": true,
   "main": "keeper.js",
   "dependencies": {
+    "chokidar": "^3.6.0",
     "puppeteer-core": "^23.0.0"
   }
 }

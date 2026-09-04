@@ -105,10 +105,13 @@ Your SillyTavern instance stays local — only the server needs to be reachable.
 
 ### Editing SillyTavern's own settings on a VPS (presets, characters, world info, ...)
 
-If you view/manage SillyTavern directly through your own tunnel (`ssh -L 8000:127.0.0.1:8000 ...`), that's a **separate** browser session from the one the mp-extension actually runs in — `keeper`'s own headless tab. SillyTavern has no live sync between separate browser tabs, so a new preset, character, etc. added through your tunnel won't show up for the mp-extension/web client until keeper's tab reloads. It does that on its own every 30 minutes, or immediately if you just restart it:
+If you view/manage SillyTavern directly through your own tunnel (`ssh -L 8000:127.0.0.1:8000 ...`), that's a **separate** browser session from the one the mp-extension actually runs in — `keeper`'s own headless tab. SillyTavern has no live sync between separate browser tabs, so a new preset, character, etc. added through your tunnel won't show up for the mp-extension/web client until keeper's tab reloads.
+
+The installer sets `ST_DATA_PATH` for the keeper service, pointing at your SillyTavern user's data folder. With that set, keeper watches it and reloads its tab automatically — within a few seconds — whenever you add/edit a preset, character, world info, or persona. It deliberately does **not** watch the chat log folders, since those get written on every single message during normal play — watching them would reload the tab constantly and break live sessions. As a fallback (e.g. if `ST_DATA_PATH` isn't set, or something slips past the watched folders), it still reloads every 30 minutes on its own, or immediately if you restart it:
 ```bash
 sudo systemctl restart tavern-keeper
 ```
+Existing installs: re-run the installer (or add `Environment=ST_DATA_PATH=/path/to/SillyTavern/data/default-user` to `/etc/systemd/system/tavern-keeper.service` yourself, then `sudo systemctl daemon-reload && sudo systemctl restart tavern-keeper`) to pick up automatic reloading.
 
 ### Securing a publicly exposed server
 

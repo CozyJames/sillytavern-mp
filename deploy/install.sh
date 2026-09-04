@@ -202,6 +202,7 @@ WorkingDirectory=$INSTALL_DIR/keeper
 ExecStart=$NODE_BIN keeper.js
 Environment=ST_URL=$ST_LOCAL_URL
 Environment=CHROME_PATH=$CHROME_PATH
+Environment=ST_DATA_PATH=$ST_PATH/data/$ST_USER
 Restart=on-failure
 RestartSec=5
 

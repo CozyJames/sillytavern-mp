@@ -89,8 +89,19 @@ function connectSocket() {
     }
   });
 
-  // Start pushing chat history + session info
-  setInterval(pushChatHistory, 1500);
+  // Start pushing chat history + session info. Polling rate adapts to
+  // generation state: fast while something is actively streaming (so
+  // players watch it type live), much slower while idle — event listeners
+  // below already cover real changes (new/edited/deleted messages, chat
+  // switches), this is just the belt-and-braces catch-all for anything
+  // that slips through (mid-stream token updates don't fire discrete
+  // events), so there's no reason to run it at generation speed 24/7.
+  schedulePoll();
+}
+
+function schedulePoll() {
+  const delay = is_send_press ? 700 : 6000;
+  setTimeout(() => { pushChatHistory(); schedulePoll(); }, delay);
 }
 
 // ──────────── Push chat history to server ────────────
@@ -99,17 +110,40 @@ function connectSocket() {
 // markdown/HTML formatting, macros ({{getvar::x}}, {{char}}, etc.) resolved,
 // and any display Regex scripts applied, exactly as SillyTavern shows them.
 // Also grabs the reasoning ("thinking") block, if the model/message has one.
+// index -> { mes, swipe_id, renderedHtml, reasoningHtml }. Keyed off the
+// message content itself (not just the index), so it self-invalidates:
+// an edit, swipe, or a delete shifting every later index all change what's
+// stored at that position, which is caught by the mes/swipe_id comparison
+// below — no need to manually clear this from every command handler.
+const renderedCache = new Map();
+
 function getEnrichedChat() {
   const chat = getContext().chat;
-  return chat.map((msg, i) => {
+  const lastIdx = chat.length - 1;
+  const out = new Array(chat.length);
+  for (let i = 0; i < chat.length; i++) {
+    const msg = chat[i];
+    const cached = renderedCache.get(i);
+    // Always re-query the last couple of messages — one of them may be
+    // actively streaming, so its DOM content can change without msg.mes
+    // itself changing until the stream finishes.
+    const isTail = i >= lastIdx - 1;
+    if (!isTail && cached && cached.mes === msg.mes && cached.swipe_id === msg.swipe_id) {
+      out[i] = { ...msg, renderedHtml: cached.renderedHtml, reasoningHtml: cached.reasoningHtml };
+      continue;
+    }
     const mesBlock = document.querySelector(`#chat .mes[mesid="${i}"] .mes_text`);
     const reasoningBlock = document.querySelector(`#chat .mes[mesid="${i}"] .mes_reasoning`);
-    return {
-      ...msg,
-      renderedHtml: mesBlock ? mesBlock.innerHTML : null,
-      reasoningHtml: reasoningBlock ? reasoningBlock.innerHTML : null,
-    };
-  });
+    const renderedHtml = mesBlock ? mesBlock.innerHTML : null;
+    const reasoningHtml = reasoningBlock ? reasoningBlock.innerHTML : null;
+    renderedCache.set(i, { mes: msg.mes, swipe_id: msg.swipe_id, renderedHtml, reasoningHtml });
+    out[i] = { ...msg, renderedHtml, reasoningHtml };
+  }
+  // Drop stale entries past the current chat length (deleted tail, new/switched chat)
+  if (renderedCache.size > chat.length) {
+    for (const key of renderedCache.keys()) if (key >= chat.length) renderedCache.delete(key);
+  }
+  return out;
 }
 
 function pushChatHistory() {
@@ -187,10 +221,17 @@ async function buildSessionInfo() {
     avatarUrl: absoluteUrl(ctx.getThumbnailUrl('persona', id)),
   }));
 
+  // Counted per-message and summed, NOT as one joined blob: ST's own
+  // getTokenCountAsync caches by a hash of the text it's given (relevant
+  // for chat-completion APIs, which count tokens via a real request to
+  // ST's backend). A single ever-growing joined string produces a new
+  // hash on every call, defeating that cache entirely — counted
+  // per-message, only the newest/edited message ever misses the cache;
+  // everything else that hasn't changed resolves instantly.
   let contextTokens = 0;
   try {
-    const text = (ctx.chat || []).map(m => m.mes || '').join('\n');
-    contextTokens = await ctx.getTokenCountAsync(text);
+    const counts = await Promise.all((ctx.chat || []).map(m => ctx.getTokenCountAsync(m.mes || '')));
+    contextTokens = counts.reduce((sum, n) => sum + n, 0);
   } catch (e) {
     console.warn('[MP] Token count failed:', e);
   }
@@ -303,8 +344,28 @@ function processNext() {
   processing = true;
   const cmd = commandQueue.shift();
   executeCommand(cmd);
-  const delay = cmd.type === 'message' ? 10000 : 1500;
-  setTimeout(processNext, delay);
+  // Move on as soon as generation has actually finished instead of always
+  // waiting out the old worst-case fixed delay — a fast model/API done in
+  // 1-2s no longer blocks the next queued player action for up to 10s.
+  // Still caps at the same delay as before as a safety net, so this can
+  // only ever be faster, never slower.
+  const maxDelay = cmd.type === 'message' ? 10000 : 1500;
+  waitThenNext(maxDelay);
+}
+
+function waitThenNext(maxDelay) {
+  const deadline = Date.now() + maxDelay;
+  // Give ST's async STscript a moment to actually start generating before
+  // checking is_send_press, so we don't race ahead on a stale "false".
+  const graceUntil = Date.now() + 400;
+  (function poll() {
+    const now = Date.now();
+    if (now >= deadline || (now >= graceUntil && !is_send_press)) {
+      processNext();
+      return;
+    }
+    setTimeout(poll, 250);
+  })();
 }
 
 function executeCommand(cmd) {

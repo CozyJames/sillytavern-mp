@@ -31,6 +31,24 @@ When a player sends a message, the extension runs it through SillyTavern's STscr
 
 ## Setup
 
+### Quick install
+
+One-line installers handle cloning, `npm install`, linking the extension into SillyTavern, and (for the remote one) TLS/login/the extension token/systemd services/the headless keeper — asking what they need along the way.
+
+**Everything on your own PC** (no TLS, no login, no keeper — you keep the browser tab open yourself):
+```bash
+curl -fsSL https://raw.githubusercontent.com/CozyJames/sillytavern-mp/master/deploy/install-local.sh | bash
+```
+
+**VPS / remote server** (TLS, login, extension token, systemd services, optional 24/7 headless-browser keeper):
+```bash
+curl -fsSL https://raw.githubusercontent.com/CozyJames/sillytavern-mp/master/deploy/install.sh | bash
+```
+
+Both are safe to re-run (they update the existing checkout rather than re-cloning). To remove everything either one set up: `bash deploy/uninstall.sh` from inside the checkout (never touches SillyTavern, Node, or Chromium — only this project's own services/files, and only the checkout itself if you confirm).
+
+### Manual setup
+
 ### 1. Install the extension
 
 Clone the repo into your SillyTavern extensions directory:

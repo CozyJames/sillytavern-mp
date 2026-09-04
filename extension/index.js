@@ -421,8 +421,17 @@ async function sendMessageAs(personaId, message) {
   console.log('[MP] Sending as persona:', personaId);
   const ctx = getContext();
 
+  // Snap back to whoever's persona was active before this message, once
+  // it's sent — otherwise the tavern is left showing the last remote
+  // player's persona indefinitely, which is wrong if the host is typing
+  // directly into ST themselves, or just looking at their own screen.
+  const previousPersonaId = user_avatar;
+  const restore = previousPersonaId && previousPersonaId !== personaId
+    ? ` | /persona-set mode=lookup ${stQuoteArg(previousPersonaId)}`
+    : '';
+
   const safeMessage = stEscape(message);
-  const script = `/persona-set mode=lookup ${stQuoteArg(personaId)} | /send ${safeMessage} | /trigger`;
+  const script = `/persona-set mode=lookup ${stQuoteArg(personaId)} | /send ${safeMessage} | /trigger${restore}`;
 
   try {
     await ctx.executeSlashCommandsWithOptions(script);

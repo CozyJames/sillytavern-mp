@@ -1091,16 +1091,40 @@
         if (!node || node.dataset.sig !== sig) {
           const fresh = renderMessage(msg, absIndex, isLastBot);
           fresh.dataset.sig = sig;
-          if (node) node.replaceWith(fresh);
+          if (node) {
+            // A page-translation tool (Google Translate in particular)
+            // rewrites text nodes in place as it works, which can leave our
+            // own reference to `node` stale/detached from where the DOM
+            // actually has it — replaceWith() then throws NotFoundError.
+            // One message's swap failing shouldn't abort updating every
+            // other message in this pass, so fall back to just appending
+            // fresh content in its place; the stale node (if still present
+            // anywhere) gets swept up by the removal pass below.
+            try {
+              node.replaceWith(fresh);
+            } catch (e) {
+              console.warn('[chat] replaceWith failed (likely a page translator), inserting instead:', e);
+              chat.insertBefore(fresh, node.nextSibling);
+            }
+          }
           node = fresh;
         }
         const wantPos = prevNode ? prevNode.nextSibling : chat.firstChild;
-        if (wantPos !== node) chat.insertBefore(node, wantPos);
+        if (wantPos !== node) {
+          try {
+            chat.insertBefore(node, wantPos);
+          } catch (e) {
+            console.warn('[chat] insertBefore failed (likely a page translator), appending instead:', e);
+            chat.appendChild(node);
+          }
+        }
         prevNode = node;
       });
 
       for (const [key, el] of existingByIndex) {
-        if (!seen.has(key)) el.remove();
+        if (!seen.has(key)) {
+          try { el.remove(); } catch (e) { console.warn('[chat] remove failed:', e); }
+        }
       }
 
       if (atBottom) chat.scrollTop = chat.scrollHeight;

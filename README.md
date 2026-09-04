@@ -103,6 +103,24 @@ For friends to connect remotely, you need to expose the server. Options:
 
 Your SillyTavern instance stays local — only the server needs to be reachable. The relay server proxies avatar images from SillyTavern itself (via `ST_LOCAL_URL`, default `http://127.0.0.1:8000`) — this works out of the box when SillyTavern and the relay server run on the same machine. If they run on different machines, set `ST_LOCAL_URL` to an address the relay server can actually reach SillyTavern at, or avatars will fall back to initials for everyone.
 
+### Editing SillyTavern's own settings on a VPS (presets, characters, world info, ...)
+
+If SillyTavern runs on a VPS, you're probably already tunneling into it to view/manage it directly:
+```bash
+ssh -L 8000:127.0.0.1:8000 root@your.server.ip
+```
+then opening `http://localhost:8000` in your own browser.
+
+That's a genuinely **separate** browser session from the one the mp-extension actually runs in — the `keeper`'s own headless tab (see `keeper/README` — or the root README's Setup section — for what keeper is). SillyTavern has no live sync between separate browser tabs, so anything you change through *your* tunneled tab (a new preset, a new character, ...) won't show up for the mp-extension/web client until keeper's tab happens to reload (every 30 min, or on `systemctl restart tavern-keeper`).
+
+To skip the wait, reach into keeper's own tab directly instead of using a second one:
+```bash
+ssh -L 9222:127.0.0.1:9222 root@your.server.ip
+```
+Then in your own Chrome/Chromium (not the tab you use for anything else — this is a separate control channel): go to `chrome://inspect/#devices`, click **Configure...** next to "Discover network targets", add `localhost:9222`, and the running tavern tab should appear under **Remote Target** with an **inspect** link. Click it to open a live DevTools window that mirrors and controls that exact tab — anything you do there (add a preset, edit a character card, ...) is instantly the same session the extension and every player's web client already see. No reload, no restart, nothing to go stale.
+
+**Never** forward or expose port 9222 outside of an SSH tunnel — the DevTools protocol it speaks has no authentication of its own; anyone who can reach it can fully control the browser (and therefore your tavern).
+
 ### Securing a publicly exposed server
 
 By default the server has **no authentication and no encryption** — fine on a private LAN/VPN, not fine on the open internet. Set these environment variables before starting it to require a login and serve over HTTPS:

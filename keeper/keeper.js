@@ -3,6 +3,7 @@
 // Requires: apt install -y chromium, npm install puppeteer-core chokidar
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const puppeteer = require('puppeteer-core');
 const chokidar = require('chokidar');
 
@@ -67,9 +68,50 @@ async function main() {
     const watchPaths = WATCHED_SUBPATHS.map((p) => path.join(ST_DATA_PATH, p)).filter((p) => fs.existsSync(p));
     if (watchPaths.length > 0) {
       console.log('[keeper] watching for ST data changes:', watchPaths.join(', '));
+
+      // SillyTavern re-saves some of its own files (settings.json, QuickReplies/Default.json)
+      // every time the page loads, with the same content - without this, that self-triggered
+      // write would trip the watcher, cause a reload, which triggers the same save again,
+      // forever. So a write only counts as a real change if the file's content actually
+      // differs from what we last saw. Baseline every existing file up front so the very
+      // first reload after startup doesn't get misread as a change too.
+      const fileHashes = new Map();
+      const hashFile = (p) => {
+        try {
+          return crypto.createHash('sha1').update(fs.readFileSync(p)).digest('hex');
+        } catch {
+          return null;
+        }
+      };
+      const walkFiles = (p) => {
+        const stat = fs.statSync(p, { throwIfNoEntry: false });
+        if (!stat) return [];
+        if (stat.isFile()) return [p];
+        if (!stat.isDirectory()) return [];
+        return fs.readdirSync(p).flatMap((entry) => walkFiles(path.join(p, entry)));
+      };
+      for (const root of watchPaths) {
+        for (const f of walkFiles(root)) fileHashes.set(f, hashFile(f));
+      }
+
       let debounceTimer = null;
-      const watcher = chokidar.watch(watchPaths, { ignoreInitial: true });
+      const watcher = chokidar.watch(watchPaths, {
+        ignoreInitial: true,
+        // ST saves files atomically (write to a temp file, then rename over the original) -
+        // these numbered temp files are never the real file, just noise.
+        ignored: /\.\d+$/,
+      });
       watcher.on('all', (event, changedPath) => {
+        if (event === 'unlink') {
+          fileHashes.delete(changedPath);
+        } else if (event === 'add' || event === 'change') {
+          const newHash = hashFile(changedPath);
+          const oldHash = fileHashes.get(changedPath);
+          fileHashes.set(changedPath, newHash);
+          if (newHash !== null && newHash === oldHash) {
+            return; // same content written again (e.g. ST's own startup save) - not a real change
+          }
+        }
         console.log('[keeper] detected change:', event, changedPath);
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {

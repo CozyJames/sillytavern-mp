@@ -105,21 +105,10 @@ Your SillyTavern instance stays local — only the server needs to be reachable.
 
 ### Editing SillyTavern's own settings on a VPS (presets, characters, world info, ...)
 
-If SillyTavern runs on a VPS, you're probably already tunneling into it to view/manage it directly:
+If you view/manage SillyTavern directly through your own tunnel (`ssh -L 8000:127.0.0.1:8000 ...`), that's a **separate** browser session from the one the mp-extension actually runs in — `keeper`'s own headless tab. SillyTavern has no live sync between separate browser tabs, so a new preset, character, etc. added through your tunnel won't show up for the mp-extension/web client until keeper's tab reloads. It does that on its own every 30 minutes, or immediately if you just restart it:
 ```bash
-ssh -L 8000:127.0.0.1:8000 root@your.server.ip
+sudo systemctl restart tavern-keeper
 ```
-then opening `http://localhost:8000` in your own browser.
-
-That's a genuinely **separate** browser session from the one the mp-extension actually runs in — the `keeper`'s own headless tab (see `keeper/README` — or the root README's Setup section — for what keeper is). SillyTavern has no live sync between separate browser tabs, so anything you change through *your* tunneled tab (a new preset, a new character, ...) won't show up for the mp-extension/web client until keeper's tab happens to reload (every 30 min, or on `systemctl restart tavern-keeper`).
-
-To skip the wait, reach into keeper's own tab directly instead of using a second one:
-```bash
-ssh -L 9222:127.0.0.1:9222 root@your.server.ip
-```
-Then in your own Chrome/Chromium (not the tab you use for anything else — this is a separate control channel): go to `chrome://inspect/#devices`, click **Configure...** next to "Discover network targets", add `localhost:9222`, and the running tavern tab should appear under **Remote Target** with an **inspect** link. Click it to open a live DevTools window that mirrors and controls that exact tab — anything you do there (add a preset, edit a character card, ...) is instantly the same session the extension and every player's web client already see. No reload, no restart, nothing to go stale.
-
-**Never** forward or expose port 9222 outside of an SSH tunnel — the DevTools protocol it speaks has no authentication of its own; anyone who can reach it can fully control the browser (and therefore your tavern).
 
 ### Securing a publicly exposed server
 

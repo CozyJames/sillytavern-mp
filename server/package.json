@@ -1,15 +1,14 @@
 {
-  "name": "st-client",
+  "name": "sillytavern-mp-server",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "author": "",
+  "author": "CozyJames",
   "license": "ISC",
-  "description": "",
+  "description": "Relay server + web client for SillyTavern Multiplayer",
   "dependencies": {
-    "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "socket.io": "^4.8.3"
   }

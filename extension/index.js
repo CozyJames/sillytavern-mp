@@ -58,8 +58,27 @@ function connectSocket() {
     console.log('[MP] WebSocket connected');
     lastChatStr = '';
     lastSessionStr = '';
-    pushChatHistory();
-    pushSessionInfo();
+
+    // Right after a fresh page load (e.g. keeper's tab reloading), SillyTavern
+    // hasn't necessarily finished loading the active chat/character list into
+    // ctx yet — pushing that half-loaded state here would broadcast an empty
+    // chat and "No characters found" to every connected player for a few
+    // seconds until the real data arrives, making the chat appear to
+    // disappear and reappear. Only push right away if there's actually
+    // something loaded; otherwise wait for it (CHAT_CHANGED covers the
+    // normal case, this retry is the fallback).
+    const ctx = getContext();
+    if (ctx.chat?.length > 0) pushChatHistory();
+    if (ctx.characters?.length > 0) pushSessionInfo();
+    if (!ctx.chat?.length || !ctx.characters?.length) {
+      setTimeout(() => {
+        lastChatStr = '';
+        lastSessionStr = '';
+        pushChatHistory();
+        pushSessionInfo();
+      }, 2000);
+    }
+
     // Announce the real current generation state on every (re)connect.
     // Without this, a server that cached "generating: true" from a session
     // that dropped mid-generation (tab closed, network blip) would keep

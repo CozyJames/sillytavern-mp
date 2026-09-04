@@ -4,8 +4,7 @@
     "requires": [],
     "optional": [],
     "js": "index.js",
-    "css": "style.css",
-    "author": "Liam Swift",
-    "version": "0.0.1",
-    "homePage": "https://liamswift.com"
+    "author": "CozyJames",
+    "version": "0.1.0",
+    "homePage": "https://github.com/CozyJames/sillytavern-mp"
 }

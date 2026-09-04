@@ -1,33 +1,17 @@
-# SillyTavern Extension Example
+# SillyTavern Multiplayer — extension
 
-*Provide a brief description of how your extension works, what problem it aims to solve.*
+The SillyTavern-side half of this project. Runs inside SillyTavern's own
+browser tab and connects to the relay server (see `../server`) over
+WebSocket, driving the tavern via its own STscript slash-commands
+(`/persona-set`, `/send`, `/swipe`, `/regenerate`, `/cut`, `/go`,
+`/newchat`, `/continue`, `/model`, `/preset`, ...) rather than simulating
+DOM clicks.
 
-## Features
+See the root [README.md](../README.md) for setup and how this fits
+together with `server/` and `keeper/`.
 
-*Describe some of the main selling points of your extension.*
+## Configuration
 
-## Installation and Usage
-
-### Installation
-
-*In most cases, this should just be using ST's inbuilt extension installer.* 
-
-### Usage
-
-*Explain how to use this extension.*
-
-## Prerequisites
-
-*Specify the version of ST necessary here.*
-
-## Support and Contributions
-
-*Where should someone ask for support?*
-
-*Consider including your own contact info for help/questions.*
-
-*How can people help add to this extension?*
-
-## License
-
-*Be cool, use an open source license.*
+Copy `config.local.example.js` to `config.local.js` (gitignored) and set
+`TARGET_URL`/`AUTH_TOKEN` there — see the root README's "Configure"
+section.

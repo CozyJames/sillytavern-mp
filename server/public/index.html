@@ -501,11 +501,6 @@
     //  CONFIG
     // ═══════════════════════════════════
 
-    const fallbackAvatars = {
-      James: "/avatars/james.jpg",
-      "The Narrator": "/avatars/narrator.jpg",
-    };
-
     const NAME_KEY = "stmp_character_name"; // legacy freeform name, used as a last-resort persona match
     const PERSONA_ID_KEY = "stmp_persona_id";
 
@@ -963,7 +958,7 @@
       if (explicitUrl) return explicitUrl;
       if (isUser && personaAvatarByName[name]) return personaAvatarByName[name];
       if (!isUser && characterAvatarByName[name]) return characterAvatarByName[name];
-      return fallbackAvatars[name] || null;
+      return null;
     }
 
     function createAvatar(name, url) {
@@ -1225,7 +1220,7 @@
 
     function appendGhost(name, message) {
       const chat = document.getElementById("chat");
-      const g = renderMessage({ name, is_user: true, mes: message, avatar: personaAvatarByName[name] || fallbackAvatars[name] }, -1, false);
+      const g = renderMessage({ name, is_user: true, mes: message, avatar: personaAvatarByName[name] }, -1, false);
       g.classList.add("ghost");
       chat.appendChild(g);
       chat.scrollTop = chat.scrollHeight;

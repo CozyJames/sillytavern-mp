@@ -61,9 +61,10 @@ The server runs on port 3000 by default.
 
 ### 4. Configure
 
-If the server runs on a different machine, update `const TARGET_URL` in the extension's `index.js`:
+If the server runs on a different machine, copy `extension/config.local.example.js` to `extension/config.local.js` (gitignored — a `git pull` will never touch it or conflict with your values) and set:
 ```js
-const TARGET_URL = 'http://your-server-address:3000';
+export const TARGET_URL = 'http://your-server-address:3000';
+export const AUTH_TOKEN = ''; // only needed if MP_EXTENSION_TOKEN is set on the server, see "Securing a publicly exposed server" below
 ```
 
 Personas, characters and presets are configured once in SillyTavern itself — the web client picks them up automatically, players never need to open the tavern.
@@ -97,7 +98,7 @@ export MP_TLS_KEY=/path/to/key.pem
 node server.js
 ```
 
-- **Login**: with `MP_AUTH_USER`/`MP_AUTH_PASS` set, anyone connecting from outside the machine is redirected to a login page (`/login`) and gets a session cookie on success. Connections from `localhost` are exempt, but note that's usually *not* what the ST extension is — the extension runs inside whatever browser is displaying the tavern, and that's normally a different machine than the server even when the tavern and this relay server run on the same box (e.g. you're viewing the tavern through an SSH tunnel). For the extension, set `MP_EXTENSION_TOKEN` to a random shared secret here, and put the exact same value in `AUTH_TOKEN` near the top of `extension/index.js` — that lets it connect without going through the login page.
+- **Login**: with `MP_AUTH_USER`/`MP_AUTH_PASS` set, anyone connecting from outside the machine is redirected to a login page (`/login`) and gets a session cookie on success. Connections from `localhost` are exempt, but note that's usually *not* what the ST extension is — the extension runs inside whatever browser is displaying the tavern, and that's normally a different machine than the server even when the tavern and this relay server run on the same box (e.g. you're viewing the tavern through an SSH tunnel). For the extension, set `MP_EXTENSION_TOKEN` to a random shared secret here, and put the exact same value in `AUTH_TOKEN` in `extension/config.local.js` (see "Configure" above) — that lets it connect without going through the login page.
 - **TLS**: with `MP_TLS_CERT`/`MP_TLS_KEY` set to a certificate + key file, the server switches to HTTPS/WSS. A free self-signed certificate (no domain needed) works fine — generate one with:
   ```bash
   openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \

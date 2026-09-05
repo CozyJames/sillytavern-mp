@@ -23,6 +23,18 @@ let lastSessionStr = '';
 let commandQueue = [];
 let processing = false;
 
+// Set once CHAT_CHANGED has fired for the first time since this page loaded
+// (i.e. SillyTavern has actually finished loading a specific chat, whatever
+// its length). Every push function below refuses to send anything before
+// that - without it, any of the several event listeners that force a push
+// (connect, MESSAGE_RECEIVED, CHARACTER_MESSAGE_RENDERED, the poll, ...) could
+// fire while ctx.chat/ctx.characters are still empty right after a fresh
+// page load (e.g. keeper's tab reloading), broadcasting an empty chat/"No
+// characters found" to every connected player for a few seconds until the
+// real data arrives - looking like the chat randomly disappears and
+// reappears. Naturally resets to false on the next page load.
+let chatConfirmedLoaded = false;
+
 // ──────────── Boot: load socket.io client dynamically ────────────
 
 function boot() {
@@ -59,25 +71,11 @@ function connectSocket() {
     lastChatStr = '';
     lastSessionStr = '';
 
-    // Right after a fresh page load (e.g. keeper's tab reloading), SillyTavern
-    // hasn't necessarily finished loading the active chat/character list into
-    // ctx yet — pushing that half-loaded state here would broadcast an empty
-    // chat and "No characters found" to every connected player for a few
-    // seconds until the real data arrives, making the chat appear to
-    // disappear and reappear. Only push right away if there's actually
-    // something loaded; otherwise wait for it (CHAT_CHANGED covers the
-    // normal case, this retry is the fallback).
-    const ctx = getContext();
-    if (ctx.chat?.length > 0) pushChatHistory();
-    if (ctx.characters?.length > 0) pushSessionInfo();
-    if (!ctx.chat?.length || !ctx.characters?.length) {
-      setTimeout(() => {
-        lastChatStr = '';
-        lastSessionStr = '';
-        pushChatHistory();
-        pushSessionInfo();
-      }, 2000);
-    }
+    // pushChatHistory()/pushSessionInfo() are no-ops until chatConfirmedLoaded
+    // (see its declaration) - safe to just call them here unconditionally,
+    // CHAT_CHANGED will push the real data once SillyTavern has it.
+    pushChatHistory();
+    pushSessionInfo();
 
     // Announce the real current generation state on every (re)connect.
     // Without this, a server that cached "generating: true" from a session
@@ -163,6 +161,7 @@ function getEnrichedChat() {
 
 function pushChatHistory() {
   if (!socket || !socket.connected) return;
+  if (!chatConfirmedLoaded) return;
   const enriched = getEnrichedChat();
   const str = JSON.stringify(enriched);
   const changed = str !== lastChatStr;
@@ -254,6 +253,7 @@ async function buildSessionInfo() {
 
 async function pushSessionInfo() {
   if (!socket || !socket.connected) return;
+  if (!chatConfirmedLoaded) return;
   const info = await buildSessionInfo();
   const str = JSON.stringify(info);
   if (str === lastSessionStr) return;
@@ -839,6 +839,7 @@ if (event_types.USER_MESSAGE_RENDERED) {
 
 // Chat/persona switches change session info (and the whole chat log)
 eventSource.on(event_types.CHAT_CHANGED, () => {
+  chatConfirmedLoaded = true;
   lastChatStr = '';
   lastSessionStr = '';
   pushChatHistory();

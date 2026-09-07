@@ -262,18 +262,20 @@ function getRealMaxContext(ctx) {
 // Token counting for the context meter is expensive: for chat-completion
 // (proxy/aggregator) backends ST counts tokens via a real backend request,
 // one per message. buildSessionInfo can run several times a second during
-// streaming, so counting every message every time floods the backend — and
-// many proxy/aggregator backends reject ST's tokenize endpoint with 403, so
-// every attempt fails, nothing caches, and it re-fires into a request storm
-// that also leaves the meter stuck at 0. So:
-//   - throttle real counting to once every few seconds, reusing the last value
-//     (real or estimated) in between;
-//   - if a real count ever fails, trip a breaker and switch to a cheap
-//     char-based estimate from then on — no more tokenize requests, and the
-//     meter shows an approximate figure instead of a broken 0.
-let lastTokenCount = 0;
+// streaming, so counting every message every time would flood the backend.
+// Some proxies also 403 the tokenize endpoint intermittently — so a given
+// attempt can fail even though the endpoint works most of the time.
+//
+// Strategy: throttle real counting to once every few seconds (kills the
+// flood while still retrying), and NEVER permanently give up — every
+// throttled round tries a real count again, so the meter self-heals the
+// moment the endpoint answers. A failed round falls back to the last real
+// count we got (so the meter doesn't drop to 0 or flicker); only if we've
+// never once succeeded do we show a rough char-based estimate.
+let reportedTokens = 0;
+let lastRealTokens = null;      // most recent successful real count, or null
 let lastTokenCountAt = 0;
-let tokenCountUnavailable = false; // backend can't tokenize — estimate only
+let tokenCountEstimated = false; // true only while we've never had a real count
 const TOKEN_COUNT_THROTTLE_MS = 4000;
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 
@@ -286,28 +288,30 @@ function estimateTokens(chat) {
 async function getContextTokens(ctx) {
   const chat = ctx.chat || [];
   const now = Date.now();
-  // Throttle: reuse the last value (real or estimate) within the window. This
-  // bounds how often we hit the backend regardless of streaming frequency.
+  // Throttle: reuse the last reported value within the window, bounding how
+  // often we hit the backend regardless of streaming frequency.
   if (lastTokenCountAt !== 0 && now - lastTokenCountAt < TOKEN_COUNT_THROTTLE_MS) {
-    return lastTokenCount;
+    return reportedTokens;
   }
   lastTokenCountAt = now;
-  if (tokenCountUnavailable) {
-    lastTokenCount = estimateTokens(chat);
-    return lastTokenCount;
-  }
   try {
     const counts = await Promise.all(chat.map(m => ctx.getTokenCountAsync(m.mes || '')));
-    lastTokenCount = counts.reduce((sum, n) => sum + n, 0);
-    return lastTokenCount;
+    lastRealTokens = counts.reduce((sum, n) => sum + n, 0);
+    tokenCountEstimated = false;
+    reportedTokens = lastRealTokens;
   } catch (e) {
-    // This backend can't tokenize (e.g. a proxy that 403s the tokenize
-    // endpoint). Stop trying so we don't hammer it, and estimate from now on.
-    tokenCountUnavailable = true;
-    lastTokenCount = estimateTokens(chat);
-    console.warn('[MP] Token counting unavailable on this backend; showing an estimate.');
-    return lastTokenCount;
+    // This round's tokenize request failed (e.g. the proxy 403'd it). Keep
+    // showing the last real count if we ever had one — the next throttled
+    // round will try again and self-heal. Only estimate if we've never
+    // succeeded, so the meter shows something instead of 0.
+    if (lastRealTokens !== null) {
+      reportedTokens = lastRealTokens;
+    } else {
+      reportedTokens = estimateTokens(chat);
+      tokenCountEstimated = true;
+    }
   }
+  return reportedTokens;
 }
 
 async function buildSessionInfo() {
@@ -340,7 +344,7 @@ async function buildSessionInfo() {
     chatId: ctx.chatId ?? null,
     maxContext: getRealMaxContext(ctx),
     contextTokens,
-    contextTokensEstimated: tokenCountUnavailable,
+    contextTokensEstimated: tokenCountEstimated,
     characters,
     personas,
     activePersonaId: user_avatar,

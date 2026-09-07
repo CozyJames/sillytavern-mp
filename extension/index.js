@@ -41,16 +41,25 @@ const IS_KEEPER = (() => {
   catch { return false; }
 })();
 
-// Set once CHAT_CHANGED has fired for the first time since this page loaded
-// (i.e. SillyTavern has actually finished loading a specific chat, whatever
-// its length). Every push function below refuses to send anything before
-// that - without it, any of the several event listeners that force a push
-// (connect, MESSAGE_RECEIVED, CHARACTER_MESSAGE_RENDERED, the poll, ...) could
-// fire while ctx.chat/ctx.characters are still empty right after a fresh
-// page load (e.g. keeper's tab reloading), broadcasting an empty chat/"No
-// characters found" to every connected player for a few seconds until the
-// real data arrives - looking like the chat randomly disappears and
-// reappears. Naturally resets to false on the next page load.
+// Two separate "ready" gates, because the character/persona list and the
+// chat log become available at different times and one must not block the
+// other:
+//
+// stReady — set on APP_READY, once SillyTavern has booted and its character
+// list is populated. Gates pushSessionInfo (characters, personas, presets).
+// This does NOT depend on a chat being open: the keeper's tab often sits at
+// the character-select screen with no active chat, and the web client still
+// needs the character list so a player can pick one. Gating the list on a
+// chat being loaded was a bug — it left the web client stuck on "Waiting for
+// extension…" whenever no chat was open.
+//
+// chatConfirmedLoaded — set on CHAT_CHANGED, once a specific chat has actually
+// finished loading. Gates pushChatHistory only, so we never broadcast an empty
+// chat during the load storm right after a fresh page load (e.g. keeper's tab
+// reloading) that then flips to the real chat a moment later.
+//
+// Both naturally reset to false on the next page load.
+let stReady = false;
 let chatConfirmedLoaded = false;
 
 // ──────────── Boot: load socket.io client dynamically ────────────
@@ -303,7 +312,7 @@ async function buildSessionInfo() {
 async function pushSessionInfo() {
   if (!socket || !socket.connected) return;
   if (!isHost) return;
-  if (!chatConfirmedLoaded) return;
+  if (!stReady) return;
   const info = await buildSessionInfo();
   const str = JSON.stringify(info);
   if (str === lastSessionStr) return;
@@ -888,8 +897,24 @@ if (event_types.USER_MESSAGE_RENDERED) {
   });
 }
 
+// SillyTavern has booted and its character list is loaded — the web client
+// can be given the session info (characters/personas/presets) now, even if no
+// chat is open yet (e.g. keeper's tab sitting at the character-select screen).
+if (event_types.APP_READY) {
+  eventSource.on(event_types.APP_READY, () => {
+    stReady = true;
+    lastSessionStr = '';
+    pushSessionInfo();
+    // Belt-and-braces: if the character list wasn't fully populated the very
+    // instant APP_READY fired, re-push shortly after so the web client doesn't
+    // stick on an empty "No characters found".
+    setTimeout(() => { lastSessionStr = ''; pushSessionInfo(); }, 800);
+  });
+}
+
 // Chat/persona switches change session info (and the whole chat log)
 eventSource.on(event_types.CHAT_CHANGED, () => {
+  stReady = true;
   chatConfirmedLoaded = true;
   lastChatStr = '';
   lastSessionStr = '';

@@ -11,6 +11,12 @@ const ST_URL = process.env.ST_URL || 'http://127.0.0.1:8000';
 const CHROME_PATH = process.env.CHROME_PATH || '/usr/bin/chromium-browser';
 const RELOAD_MS = 30 * 60 * 1000; // fallback safety net, in case the tab wedges silently
 
+// Mark this as the keeper tab so the mp-extension registers with the relay as
+// the priority host (see extension/index.js). This is what lets your own
+// tunnel'd ST tab stay open harmlessly without fighting the keeper for
+// control of the multiplayer session. ST ignores unknown query params.
+const HOST_URL = ST_URL + (ST_URL.includes('?') ? '&' : '?') + 'mp_host=1';
+
 // Optional: SillyTavern's per-user data folder, e.g. .../SillyTavern/data/default-user
 // When set, keeper watches it for real settings changes (presets, characters, world
 // info, personas) and reloads promptly instead of waiting for the 30-minute timer.
@@ -50,8 +56,8 @@ async function main() {
   async function load() {
     if (loading) return loading;
     loading = (async () => {
-      console.log('[keeper] loading', ST_URL);
-      await page.goto(ST_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+      console.log('[keeper] loading', HOST_URL);
+      await page.goto(HOST_URL, { waitUntil: 'networkidle2', timeout: 60000 });
       console.log('[keeper] loaded');
     })();
     try {

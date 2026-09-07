@@ -165,12 +165,46 @@ let generationStatus = { generating: false, characterName: null };
 const onlineUsers = new Map(); // name → timestamp
 const PRESENCE_TIMEOUT = 12_000;
 
-// Whichever socket sends 'chat-update' is, by definition, the extension —
-// web clients never emit that. Tracking it lets 'command' go straight to
-// the one socket that actually acts on it, instead of every connected
-// player's browser having to receive and ignore every other player's
-// commands too.
-let extensionSocketId = null;
+// Single-host arbitration. The extension loads in EVERY SillyTavern tab (it's
+// in ST's shared extensions dir), so the keeper's headless tab and the user's
+// own tunnel'd tab can both be running it. If more than one acted as the
+// relay's source of truth they'd fight — different active character/chat per
+// tab, commands landing in the wrong one, state flip-flopping. So exactly one
+// registered extension is the host at a time; every other is told to stand
+// down (see the extension's 'extension-role' handling). The keeper registers
+// with role 'keeper' and gets priority as the stable, always-on host.
+let hostSocketId = null;
+const extensions = new Map(); // socket.id -> role ('keeper' | 'tab')
+
+function pickHost() {
+  // Prefer a keeper over a transient human tab; otherwise first one wins.
+  let firstTab = null;
+  for (const [id, role] of extensions) {
+    if (role === 'keeper') return id;
+    if (firstTab === null) firstTab = id;
+  }
+  return firstTab;
+}
+
+function reassignHost() {
+  const next = pickHost();
+  if (next === hostSocketId) return;
+  const prev = hostSocketId;
+  hostSocketId = next;
+  if (prev && io.sockets.sockets.get(prev)) io.to(prev).emit('extension-role', { host: false });
+  if (hostSocketId) io.to(hostSocketId).emit('extension-role', { host: true });
+  console.log('[WS] Host is now:', hostSocketId || '(none)');
+}
+
+// An extension that pushes state without having explicitly registered (an
+// older extension build) is registered on the fly as a plain tab, so a
+// half-upgraded deploy still elects a host instead of going dead.
+function ensureRegistered(socket) {
+  if (!extensions.has(socket.id)) {
+    extensions.set(socket.id, 'tab');
+    reassignHost();
+  }
+}
 
 // The extension always pushes the FULL chat history (that traffic stays
 // local/same-box, it's cheap) — but re-broadcasting all of it to every
@@ -198,9 +232,17 @@ io.on('connection', (socket) => {
   // Broadcast current online list
   broadcastOnline();
 
-  // ── Chat history from ST extension ──
+  // ── An extension identifying itself and its role (keeper vs plain tab) ──
+  socket.on('register-extension', ({ role } = {}) => {
+    extensions.set(socket.id, role === 'keeper' ? 'keeper' : 'tab');
+    console.log(`[WS] Extension registered: ${socket.id} (${extensions.get(socket.id)})`);
+    reassignHost();
+  });
+
+  // ── Chat history from ST extension (only the host's is authoritative) ──
   socket.on('chat-update', (data) => {
-    extensionSocketId = socket.id;
+    ensureRegistered(socket);
+    if (socket.id !== hostSocketId) return; // ignore non-host tabs
     chatHistory = data;
     // Broadcast to everyone EXCEPT the sender (extension)
     socket.broadcast.emit('chat-update', chatWindow());
@@ -216,13 +258,15 @@ io.on('connection', (socket) => {
 
   // ── Session info (characters/personas/current chat/tokens) from ST extension ──
   socket.on('session-info', (data) => {
-    extensionSocketId = socket.id;
+    ensureRegistered(socket);
+    if (socket.id !== hostSocketId) return;
     sessionInfo = data;
     socket.broadcast.emit('session-info', sessionInfo);
   });
 
   // ── AI generation status from ST extension, visible to every player ──
   socket.on('generation-status', (data) => {
+    if (socket.id !== hostSocketId) return;
     generationStatus = data;
     socket.broadcast.emit('generation-status', generationStatus);
   });
@@ -248,12 +292,12 @@ io.on('connection', (socket) => {
   // ── Command from web client → forward to ST extension ──
   socket.on('command', (cmd) => {
     console.log('[WS] Command:', cmd.type || 'message');
-    if (extensionSocketId) {
-      io.to(extensionSocketId).emit('command', cmd);
+    if (hostSocketId) {
+      io.to(hostSocketId).emit('command', cmd);
     } else {
-      // Extension hasn't been seen yet this run (fresh server start,
-      // reconnecting) — fall back to broadcasting so the command still
-      // has a chance of arriving once it does connect.
+      // No host elected yet (fresh server start, extension reconnecting) —
+      // fall back to broadcasting so the command still has a chance of
+      // arriving. Non-host extensions ignore commands, so this is safe.
       io.emit('command', cmd);
     }
     // Ack back to sender with the command type
@@ -283,7 +327,11 @@ io.on('connection', (socket) => {
   // ── Disconnect ──
   socket.on('disconnect', () => {
     console.log(`[WS] Disconnected: ${socket.id}`);
-    if (socket.id === extensionSocketId) extensionSocketId = null;
+    if (extensions.has(socket.id)) {
+      extensions.delete(socket.id);
+      if (socket.id === hostSocketId) hostSocketId = null;
+      reassignHost(); // promote another extension (a waiting tab) if any
+    }
     if (socket.data.name) {
       onlineUsers.delete(socket.data.name);
       broadcastOnline();

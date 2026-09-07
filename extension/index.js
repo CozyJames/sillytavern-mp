@@ -23,6 +23,24 @@ let lastSessionStr = '';
 let commandQueue = [];
 let processing = false;
 
+// Single-host arbitration. The extension loads in EVERY SillyTavern browser
+// tab (it lives in ST's shared extensions dir), so the keeper's headless tab
+// AND your own tunnel'd tab can both be running it at once. If more than one
+// acted as the relay's source of truth they'd fight — each tab has its own
+// active character/chat, so commands land in the wrong tab, generation runs
+// as the wrong character, and state flip-flops. The relay server therefore
+// designates exactly one extension as the host; every other instance is told
+// to stand down and stays fully passive (no pushes, ignores commands). isHost
+// is driven entirely by the server's 'extension-role' message below.
+let isHost = false;
+let roleReceived = false;
+// The keeper opens ST with ?mp_host=1 (see keeper.js) so the server can give
+// it priority as the stable, always-on host over a transient human tab.
+const IS_KEEPER = (() => {
+  try { return new URLSearchParams(location.search).has('mp_host'); }
+  catch { return false; }
+})();
+
 // Set once CHAT_CHANGED has fired for the first time since this page loaded
 // (i.e. SillyTavern has actually finished loading a specific chat, whatever
 // its length). Every push function below refuses to send anything before
@@ -71,27 +89,44 @@ function connectSocket() {
     lastChatStr = '';
     lastSessionStr = '';
 
-    // pushChatHistory()/pushSessionInfo() are no-ops until chatConfirmedLoaded
-    // (see its declaration) - safe to just call them here unconditionally,
-    // CHAT_CHANGED will push the real data once SillyTavern has it.
-    pushChatHistory();
-    pushSessionInfo();
+    // Ask the relay whether we're the host. Until it answers (via
+    // 'extension-role'), isHost stays false and every push/command is a no-op,
+    // so a non-host tab never fights the real host. See isHost's declaration.
+    socket.emit('register-extension', { role: IS_KEEPER ? 'keeper' : 'tab' });
+    console.log('[MP] Registered as', IS_KEEPER ? 'keeper (host priority)' : 'tab');
 
-    // Announce the real current generation state on every (re)connect.
-    // Without this, a server that cached "generating: true" from a session
-    // that dropped mid-generation (tab closed, network blip) would keep
-    // showing that forever to every future client — nothing else corrects
-    // it, since setGenerating() is otherwise only called by event listeners.
-    console.log('[MP] Reporting current generation state on connect:', is_send_press);
-    setGenerating(is_send_press);
+    // Fallback for an older relay server that doesn't know 'extension-role':
+    // if it never tells us our role, assume host after a moment so a
+    // half-upgraded deploy still works instead of going silent.
+    setTimeout(() => {
+      if (!roleReceived && socket && socket.connected) {
+        console.warn('[MP] No role from server — assuming host (old server?)');
+        becomeHost();
+      }
+    }, 3000);
   });
 
   socket.on('disconnect', () => {
     console.warn('[MP] WebSocket disconnected');
+    roleReceived = false;
+    isHost = false;
+  });
+
+  // ── The relay tells us whether we're the authoritative host ──
+  socket.on('extension-role', ({ host } = {}) => {
+    roleReceived = true;
+    if (host) {
+      console.log('[MP] Server designated us HOST');
+      becomeHost();
+    } else {
+      console.log('[MP] Server designated us follower — standing down');
+      isHost = false;
+    }
   });
 
   // ── Receive commands from web clients instantly ──
   socket.on('command', (cmd) => {
+    if (!isHost) return; // followers never execute — only the host acts
     console.log('[MP] Received command:', cmd.type || 'message');
     // Only commands that actually trigger/extend AI generation need to be
     // serialized against each other (so two players' /trigger calls can't
@@ -115,6 +150,19 @@ function connectSocket() {
 
 function schedulePoll() {
   setTimeout(() => { pushChatHistory(); schedulePoll(); }, 6000);
+}
+
+// Promoted to host (by the server, or the old-server fallback): push our
+// current state so the relay and every web client immediately reflect this
+// tab, and announce the real generation state (see the connect handler's
+// note on why that matters on every (re)connect / promotion).
+function becomeHost() {
+  isHost = true;
+  lastChatStr = '';
+  lastSessionStr = '';
+  pushChatHistory();
+  pushSessionInfo();
+  setGenerating(is_send_press);
 }
 
 // ──────────── Push chat history to server ────────────
@@ -161,6 +209,7 @@ function getEnrichedChat() {
 
 function pushChatHistory() {
   if (!socket || !socket.connected) return;
+  if (!isHost) return;
   if (!chatConfirmedLoaded) return;
   const enriched = getEnrichedChat();
   const str = JSON.stringify(enriched);
@@ -253,6 +302,7 @@ async function buildSessionInfo() {
 
 async function pushSessionInfo() {
   if (!socket || !socket.connected) return;
+  if (!isHost) return;
   if (!chatConfirmedLoaded) return;
   const info = await buildSessionInfo();
   const str = JSON.stringify(info);
@@ -290,6 +340,7 @@ function setGenerating(generating) {
 
 function emitGenerating(generating) {
   if (!socket || !socket.connected) return;
+  if (!isHost) return;
   const ctx = getContext();
   socket.emit('generation-status', {
     generating,
@@ -325,7 +376,7 @@ function hookToastr() {
     if (!rawMessage) return;
     const message = String(rawMessage).replace(/<[^>]+>/g, '').trim();
     if (!message) return;
-    if (socket && socket.connected) {
+    if (isHost && socket && socket.connected) {
       socket.emit('error', { type, message });
     }
   });

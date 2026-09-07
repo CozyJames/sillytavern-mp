@@ -23,6 +23,12 @@ SillyTavern's extension API only runs inside a real browser tab that has the tav
 
 If the browser process itself crashes or disconnects, keeper exits and lets systemd (`Restart=on-failure`) bring it back.
 
+### Single host — why your own tunnel'd tab no longer fights the keeper
+
+The mp-extension loads in **every** open SillyTavern tab, because it lives in ST's shared extensions folder. That means if you also open your own tab through an SSH tunnel while the keeper is running, there are two extension instances — and each tab has its own active character and chat. Left unmanaged they fight over the relay: commands land in the wrong tab, generation runs as the wrong character, and the session flip-flops.
+
+To prevent that, the relay server elects exactly one extension as the **host**; every other instance is told to stand down and stays fully passive (it makes no pushes and ignores all commands). Keeper opens ST with a `?mp_host=1` marker so it registers as the priority host — so your own tunnel'd tab can stay open for editing presets/characters without ever disturbing the live multiplayer session. If the keeper goes down, a plain tab is promoted to host automatically; when the keeper returns it takes the host role back.
+
 ## Automatic reload on data changes
 
 SillyTavern has **no live sync between separate browser tabs/sessions**. If you manage your tavern through your own SSH tunnel (`ssh -L 8000:127.0.0.1:8000 ...`), that's a different browser session from keeper's — a new preset, character, or world you add there won't show up for the mp-extension/web client until keeper's tab reloads.

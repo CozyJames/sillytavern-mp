@@ -276,6 +276,7 @@ let reportedTokens = 0;
 let lastRealTokens = null;      // most recent successful real count, or null
 let lastTokenCountAt = 0;
 let tokenCountEstimated = false; // true only while we've never had a real count
+let loggedTokenErrorDetail = false; // one-time detailed failure diagnostic
 const TOKEN_COUNT_THROTTLE_MS = 4000;
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 
@@ -300,10 +301,25 @@ async function getContextTokens(ctx) {
     tokenCountEstimated = false;
     reportedTokens = lastRealTokens;
   } catch (e) {
-    // This round's tokenize request failed (e.g. the proxy 403'd it). Keep
-    // showing the last real count if we ever had one — the next throttled
-    // round will try again and self-heal. Only estimate if we've never
-    // succeeded, so the meter shows something instead of 0.
+    // One-time detailed diagnostic: token counting hits ST's own local
+    // /api/tokenizers/openai/count, which is CSRF-protected. Log the real
+    // failure once (jqXHR status + a snippet of the response body) so we can
+    // see WHY it 403s — invalid CSRF token, whitelist, auth — instead of
+    // guessing. jQuery rejects with a jqXHR object.
+    if (!loggedTokenErrorDetail) {
+      loggedTokenErrorDetail = true;
+      try {
+        const status = e?.status ?? e?.jqXHR?.status;
+        const body = (e?.responseText ?? e?.jqXHR?.responseText ?? e?.message ?? String(e));
+        console.warn('[MP] token count error detail — status:', status, 'body:', String(body).slice(0, 300));
+      } catch (_) {
+        console.warn('[MP] token count error (unloggable shape):', e);
+      }
+    }
+    // This round's tokenize request failed. Keep showing the last real count
+    // if we ever had one — the next throttled round will try again and
+    // self-heal. Only estimate if we've never succeeded, so the meter shows
+    // something instead of 0.
     if (lastRealTokens !== null) {
       reportedTokens = lastRealTokens;
     } else {

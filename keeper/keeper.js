@@ -19,13 +19,21 @@ const HOST_URL = ST_URL + (ST_URL.includes('?') ? '&' : '?') + 'mp_host=1';
 
 // Optional: SillyTavern's per-user data folder, e.g. .../SillyTavern/data/default-user
 // When set, keeper watches it for real settings changes (presets, characters, world
-// info, personas) and reloads promptly instead of waiting for the 30-minute timer.
-// Deliberately excludes 'chats'/'group chats' (written on every message during normal
-// play — watching those would reload the tab constantly and break live sessions) and
-// 'thumbnails*' (regenerated cache, not user-authored data).
+// info) and reloads promptly instead of waiting for the 30-minute timer.
+//
+// Watch ONLY folders that change on a deliberate user action (adding/editing a
+// preset, character, or world). Deliberately excludes:
+//   - 'chats'/'group chats' — written on every message during normal play
+//   - 'thumbnails*'          — regenerated image cache, not user-authored
+//   - 'settings.json' + 'QuickReplies' — SillyTavern rewrites these CONSTANTLY on
+//     its own during normal play (token cache, UI state, metadata) with no user
+//     action at all. Watching them reloaded the tab every ~minute mid-session,
+//     which killed live generations and caused phantom re-generations. The
+//     persona list lives in settings.json, so newly-added personas now need the
+//     30-minute timer or a manual `systemctl restart tavern-keeper` to appear —
+//     an acceptable trade for not nuking active play.
 const ST_DATA_PATH = process.env.ST_DATA_PATH || '';
 const WATCHED_SUBPATHS = [
-  'settings.json', // persona list + most ST-wide settings live here
   'characters',
   'worlds',
   'groups',
@@ -35,7 +43,6 @@ const WATCHED_SUBPATHS = [
   'TextGen Settings',
   'instruct',
   'context',
-  'QuickReplies',
   'sysprompt',
   'reasoning',
 ];

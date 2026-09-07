@@ -744,7 +744,10 @@
       const used = info.contextTokens || 0;
       const max = info.maxContext;
       const pct = Math.min(100, Math.round((used / max) * 100));
-      document.getElementById('context-meter-text').textContent = `${used.toLocaleString()} / ${max.toLocaleString()}`;
+      // "~" when the extension couldn't get a real token count from the backend
+      // (e.g. a proxy that doesn't support tokenizing) and fell back to an estimate.
+      const prefix = info.contextTokensEstimated ? '~' : '';
+      document.getElementById('context-meter-text').textContent = `${prefix}${used.toLocaleString()} / ${max.toLocaleString()}`;
       document.getElementById('context-meter-fill').style.width = pct + '%';
       el.classList.toggle('warn', pct >= 75 && pct < 90);
       el.classList.toggle('crit', pct >= 90);

@@ -259,6 +259,57 @@ function getRealMaxContext(ctx) {
   return ctx.maxContext;
 }
 
+// Token counting for the context meter is expensive: for chat-completion
+// (proxy/aggregator) backends ST counts tokens via a real backend request,
+// one per message. buildSessionInfo can run several times a second during
+// streaming, so counting every message every time floods the backend — and
+// many proxy/aggregator backends reject ST's tokenize endpoint with 403, so
+// every attempt fails, nothing caches, and it re-fires into a request storm
+// that also leaves the meter stuck at 0. So:
+//   - throttle real counting to once every few seconds, reusing the last value
+//     (real or estimated) in between;
+//   - if a real count ever fails, trip a breaker and switch to a cheap
+//     char-based estimate from then on — no more tokenize requests, and the
+//     meter shows an approximate figure instead of a broken 0.
+let lastTokenCount = 0;
+let lastTokenCountAt = 0;
+let tokenCountUnavailable = false; // backend can't tokenize — estimate only
+const TOKEN_COUNT_THROTTLE_MS = 4000;
+const CHARS_PER_TOKEN_ESTIMATE = 4;
+
+function estimateTokens(chat) {
+  let chars = 0;
+  for (const m of chat) chars += (m.mes || '').length;
+  return Math.ceil(chars / CHARS_PER_TOKEN_ESTIMATE);
+}
+
+async function getContextTokens(ctx) {
+  const chat = ctx.chat || [];
+  const now = Date.now();
+  // Throttle: reuse the last value (real or estimate) within the window. This
+  // bounds how often we hit the backend regardless of streaming frequency.
+  if (lastTokenCountAt !== 0 && now - lastTokenCountAt < TOKEN_COUNT_THROTTLE_MS) {
+    return lastTokenCount;
+  }
+  lastTokenCountAt = now;
+  if (tokenCountUnavailable) {
+    lastTokenCount = estimateTokens(chat);
+    return lastTokenCount;
+  }
+  try {
+    const counts = await Promise.all(chat.map(m => ctx.getTokenCountAsync(m.mes || '')));
+    lastTokenCount = counts.reduce((sum, n) => sum + n, 0);
+    return lastTokenCount;
+  } catch (e) {
+    // This backend can't tokenize (e.g. a proxy that 403s the tokenize
+    // endpoint). Stop trying so we don't hammer it, and estimate from now on.
+    tokenCountUnavailable = true;
+    lastTokenCount = estimateTokens(chat);
+    console.warn('[MP] Token counting unavailable on this backend; showing an estimate.');
+    return lastTokenCount;
+  }
+}
+
 async function buildSessionInfo() {
   const ctx = getContext();
 
@@ -282,26 +333,14 @@ async function buildSessionInfo() {
     avatarUrl: absoluteUrl(ctx.getThumbnailUrl('persona', id)),
   }));
 
-  // Counted per-message and summed, NOT as one joined blob: ST's own
-  // getTokenCountAsync caches by a hash of the text it's given (relevant
-  // for chat-completion APIs, which count tokens via a real request to
-  // ST's backend). A single ever-growing joined string produces a new
-  // hash on every call, defeating that cache entirely — counted
-  // per-message, only the newest/edited message ever misses the cache;
-  // everything else that hasn't changed resolves instantly.
-  let contextTokens = 0;
-  try {
-    const counts = await Promise.all((ctx.chat || []).map(m => ctx.getTokenCountAsync(m.mes || '')));
-    contextTokens = counts.reduce((sum, n) => sum + n, 0);
-  } catch (e) {
-    console.warn('[MP] Token count failed:', e);
-  }
+  const contextTokens = await getContextTokens(ctx);
 
   return {
     character,
     chatId: ctx.chatId ?? null,
     maxContext: getRealMaxContext(ctx),
     contextTokens,
+    contextTokensEstimated: tokenCountUnavailable,
     characters,
     personas,
     activePersonaId: user_avatar,

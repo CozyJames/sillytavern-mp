@@ -295,37 +295,48 @@ async function getContextTokens(ctx) {
     return reportedTokens;
   }
   lastTokenCountAt = now;
+
+  // Probe with a SINGLE request first. ST's tokenize endpoint
+  // (/api/tokenizers/openai/count) is CSRF-protected and, on some setups,
+  // systematically 403s our calls — in which case counting every message
+  // would fire 100+ doomed requests per round (log spam + latency, e.g. on
+  // character switch). The 403 is all-or-nothing, so one probe reliably
+  // predicts the rest: if it fails, fall back to an estimate immediately
+  // without the flood; if it succeeds, do the full accurate count.
+  const probeText = (chat.length ? (chat[chat.length - 1].mes || '') : '') || 'probe';
+  try {
+    await ctx.getTokenCountAsync(probeText);
+  } catch (e) {
+    if (!loggedTokenErrorDetail) {
+      loggedTokenErrorDetail = true;
+      try {
+        const status = e?.status ?? e?.jqXHR?.status;
+        const body = (e?.responseText ?? e?.jqXHR?.responseText ?? e?.message ?? String(e));
+        console.warn('[MP] token counting unavailable — status:', status, 'body:', String(body).slice(0, 200).replace(/\s+/g, ' '));
+      } catch (_) {
+        console.warn('[MP] token counting unavailable (unloggable error shape)');
+      }
+    }
+    // Endpoint refused the probe — don't hammer it with the full chat.
+    if (lastRealTokens !== null) {
+      reportedTokens = lastRealTokens; // keep the last accurate value if we had one
+    } else {
+      reportedTokens = estimateTokens(chat);
+      tokenCountEstimated = true;
+    }
+    return reportedTokens;
+  }
+
+  // Probe succeeded — the endpoint is answering, so count the whole chat.
   try {
     const counts = await Promise.all(chat.map(m => ctx.getTokenCountAsync(m.mes || '')));
     lastRealTokens = counts.reduce((sum, n) => sum + n, 0);
     tokenCountEstimated = false;
     reportedTokens = lastRealTokens;
   } catch (e) {
-    // One-time detailed diagnostic: token counting hits ST's own local
-    // /api/tokenizers/openai/count, which is CSRF-protected. Log the real
-    // failure once (jqXHR status + a snippet of the response body) so we can
-    // see WHY it 403s — invalid CSRF token, whitelist, auth — instead of
-    // guessing. jQuery rejects with a jqXHR object.
-    if (!loggedTokenErrorDetail) {
-      loggedTokenErrorDetail = true;
-      try {
-        const status = e?.status ?? e?.jqXHR?.status;
-        const body = (e?.responseText ?? e?.jqXHR?.responseText ?? e?.message ?? String(e));
-        console.warn('[MP] token count error detail — status:', status, 'body:', String(body).slice(0, 300));
-      } catch (_) {
-        console.warn('[MP] token count error (unloggable shape):', e);
-      }
-    }
-    // This round's tokenize request failed. Keep showing the last real count
-    // if we ever had one — the next throttled round will try again and
-    // self-heal. Only estimate if we've never succeeded, so the meter shows
-    // something instead of 0.
-    if (lastRealTokens !== null) {
-      reportedTokens = lastRealTokens;
-    } else {
-      reportedTokens = estimateTokens(chat);
-      tokenCountEstimated = true;
-    }
+    // Rare: probe worked but a later call failed. Keep the last good value.
+    reportedTokens = lastRealTokens !== null ? lastRealTokens : estimateTokens(chat);
+    if (lastRealTokens === null) tokenCountEstimated = true;
   }
   return reportedTokens;
 }

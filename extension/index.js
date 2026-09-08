@@ -34,11 +34,15 @@ let processing = false;
 // is driven entirely by the server's 'extension-role' message below.
 let isHost = false;
 let roleReceived = false;
-// The keeper opens ST with ?mp_host=1 (see keeper.js) so the server can give
-// it priority as the stable, always-on host over a transient human tab.
+// The keeper opens ST with a #mp_host=1 hash (see keeper.js) so the server can
+// give it priority as the stable, always-on host over a transient human tab.
+// A hash (not a query param) is used so nothing about being the keeper is ever
+// sent to ST's server. Also accept the old ?mp_host= query form for a keeper
+// that hasn't been updated yet.
 const IS_KEEPER = (() => {
-  try { return new URLSearchParams(location.search).has('mp_host'); }
-  catch { return false; }
+  try {
+    return location.hash.includes('mp_host') || new URLSearchParams(location.search).has('mp_host');
+  } catch { return false; }
 })();
 
 // Two separate "ready" gates, because the character/persona list and the

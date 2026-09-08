@@ -14,8 +14,13 @@ const RELOAD_MS = 30 * 60 * 1000; // fallback safety net, in case the tab wedges
 // Mark this as the keeper tab so the mp-extension registers with the relay as
 // the priority host (see extension/index.js). This is what lets your own
 // tunnel'd ST tab stay open harmlessly without fighting the keeper for
-// control of the multiplayer session. ST ignores unknown query params.
-const HOST_URL = ST_URL + (ST_URL.includes('?') ? '&' : '?') + 'mp_host=1';
+// control of the multiplayer session.
+//
+// Deliberately a URL *hash* (#), not a query param (?): a hash is never sent
+// to the server, so it cannot possibly interact with SillyTavern's session,
+// CSRF, or caching. (An earlier ?mp_host=1 query param was suspected of
+// contributing to CSRF 403s on ST's own tokenizer endpoint.)
+const HOST_URL = ST_URL + '#mp_host=1';
 
 // Optional: SillyTavern's per-user data folder, e.g. .../SillyTavern/data/default-user
 // When set, keeper watches it for real settings changes (presets, characters, world

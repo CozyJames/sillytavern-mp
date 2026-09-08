@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>SillyTavern MP Client</title>
   <style>
     /* Tokens lifted from SillyTavern's own default theme (public/style.css):
@@ -33,7 +33,7 @@
       --radius-sm: 5px;
       --shadow: 0 2px 14px rgba(0,0,0,0.5);
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       height: 100%; margin: 0;
       font-family: "Noto Sans", Arial, Helvetica, sans-serif;
@@ -42,7 +42,15 @@
       -webkit-font-smoothing: antialiased;
       font-size: 15px;
     }
-    body { display: flex; flex-direction: column; align-items: center; }
+    body {
+      display: flex; flex-direction: column; align-items: center;
+      /* Dynamic viewport unit: tracks the *visible* height as the mobile
+         browser's URL bar and on-screen keyboard slide in/out, so the input
+         dock stays put instead of being pushed off-screen. Falls back to the
+         100% above on browsers without dvh. */
+      height: 100dvh;
+      overflow: hidden; /* only #chat scrolls; stops the whole page from bouncing */
+    }
     button { font-family: inherit; }
 
     /* ═══════ TOP BAR ═══════ */
@@ -107,6 +115,8 @@
       flex: 1 1 auto; min-height: 0;
       padding: 4px 0 12px;
       overflow-y: auto;
+      overscroll-behavior: contain; /* no pull-to-refresh / scroll chaining to the page */
+      -webkit-overflow-scrolling: touch; /* momentum scroll on iOS */
       background: var(--bg-1);
     }
     #chat::-webkit-scrollbar { width: 6px; }
@@ -313,6 +323,9 @@
     #chat-input {
       background: var(--bg-2);
       padding: 6px 10px;
+      /* Clear the iPhone home indicator / rounded corners so the input row
+         isn't tucked under the system bar. env() is 0 on devices without it. */
+      padding-bottom: calc(6px + env(safe-area-inset-bottom));
       border-top: 1px solid var(--border);
       box-shadow: var(--shadow);
       display: flex; align-items: center; gap: 6px;
@@ -432,6 +445,36 @@
     #confirm-ok:hover { filter: brightness(1.1); }
     #confirm-cancel { background: var(--bg-3); color: var(--text-dim); border: 1px solid var(--border); }
     #confirm-cancel:hover { border-color: var(--border-hover); }
+
+    /* ═══════ MOBILE / TOUCH ═══════ */
+    @media (max-width: 600px) {
+      /* iOS zooms the whole page in when you focus an input whose font is
+         < 16px. Bumping the message box to 16px keeps the layout put. */
+      #message { font-size: 16px; min-height: 40px; }
+      #persona-select { height: 40px; font-size: 14px; max-width: 96px; }
+      #send-btn { width: 44px; height: 44px; font-size: 19px; }
+
+      /* Bigger, finger-friendly tap targets (~44px is the usual minimum). */
+      .icon-btn { width: 40px; height: 40px; font-size: 17px; }
+      .action-btn { width: 36px; height: 36px; font-size: 15px; }
+      .swipe-btn { width: 38px; height: 38px; font-size: 20px; }
+      .swipe-counter { min-width: 34px; }
+      /* No hover on touch — keep the edit/delete actions clearly visible. */
+      .msg-actions { opacity: 0.85; }
+
+      /* Reclaim horizontal space on narrow screens: smaller avatar, tighter
+         padding, so the actual message text gets more room. */
+      .message { padding: 8px 10px 6px; margin: 5px 6px; gap: 8px; }
+      .avatar { flex-basis: 40px; width: 40px; height: 40px; font-size: 13px; }
+
+      /* Slide-over session panel: comfortably wide on a phone, fully hidden
+         when closed regardless of screen width. */
+      #session-panel { width: 85vw; max-width: 340px; right: -90vw; }
+
+      /* Let the top bar grow a little instead of clipping wrapped content
+         (long usernames + the context meter). */
+      #online-bar { min-height: 35px; height: auto; padding-top: 3px; padding-bottom: 3px; }
+    }
   </style>
 </head>
 <body>

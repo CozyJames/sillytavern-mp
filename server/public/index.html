@@ -286,6 +286,26 @@
     }
     #typing-indicator:empty { display: none; padding: 0; }
 
+    /* ═══════ ROUND STATUS — who this turn is still waiting on ═══════ */
+    #round-status {
+      padding: 6px 14px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      font-style: italic;
+      background: var(--bg-2);
+    }
+    #round-status:empty { display: none; padding: 0; }
+
+    #skip-btn {
+      flex: 0 0 auto;
+      padding: 0 10px; height: 36px;
+      background: none; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s;
+      font-size: 12.5px;
+    }
+    #skip-btn:hover { color: var(--text-primary); border-color: var(--border-hover); }
+    #skip-btn:disabled { opacity: 0.3; cursor: default; }
+
     /* ═══════ TOAST ═══════ */
     #toast-container {
       position: fixed; top: 45px; left: 50%;
@@ -453,6 +473,7 @@
       #message { font-size: 16px; min-height: 40px; }
       #persona-select { height: 40px; font-size: 14px; max-width: 96px; }
       #send-btn { width: 44px; height: 44px; font-size: 19px; }
+      #skip-btn { height: 40px; padding: 0 8px; }
 
       /* Bigger, finger-friendly tap targets (~44px is the usual minimum). */
       .icon-btn { width: 40px; height: 40px; font-size: 17px; }
@@ -496,9 +517,11 @@
   <div id="bottom-dock">
     <div id="generating-indicator"><div class="spinner"></div><span id="generating-text"></span><button id="stop-btn" title="Stop generation">stop</button></div>
     <div id="typing-indicator"></div>
+    <div id="round-status"></div>
     <div id="chat-input">
       <select id="persona-select" title="Send as"><option value="">…</option></select>
       <textarea id="message" placeholder="Type a message…" rows="1" title="Enter — send · Shift+Enter — new line · Ctrl+Enter — regenerate"></textarea>
+      <button id="skip-btn" title="Skip your turn this round">skip</button>
       <button id="send-btn" title="Send (Enter)">➤</button>
     </div>
   </div>
@@ -726,7 +749,15 @@
       textEl.textContent = characterName ? `${characterName} is generating…` : 'Generating…';
       messageInput.disabled = isGenerating;
       document.getElementById('send-btn').disabled = isGenerating;
+      skipBtn.disabled = isGenerating;
       if (currentHistory.length) renderChat(currentHistory);
+    });
+
+    // ── Turn round: who this turn is still waiting on (null = no round open) ──
+    socket.on('round-status', (status) => {
+      const el = document.getElementById('round-status');
+      if (!status || !status.waitingFor || !status.waitingFor.length) { el.textContent = ''; return; }
+      el.textContent = `⏳ Waiting for: ${status.waitingFor.join(', ')}`;
     });
 
     // ── Errors relayed from SillyTavern's own toasts ──
@@ -1369,6 +1400,7 @@
 
     const messageInput = document.getElementById("message");
     const sendBtn = document.getElementById("send-btn");
+    const skipBtn = document.getElementById("skip-btn");
 
     function resizeMessageInput() {
       messageInput.style.height = "auto";
@@ -1388,6 +1420,16 @@
     }
 
     sendBtn.addEventListener("click", doSend);
+
+    // Explicitly decline to act this turn — a deliberate choice, not just an
+    // empty Enter press (which stays a harmless no-op, see doSend above).
+    function doSkip() {
+      if (isGenerating) return;
+      sendCmd({ type: "skip-turn" });
+      messageInput.value = "";
+      resizeMessageInput();
+    }
+    skipBtn.addEventListener("click", doSkip);
 
     messageInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {

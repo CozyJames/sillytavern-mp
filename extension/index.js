@@ -470,7 +470,7 @@ function hookToastr() {
 // Only these actually start/extend a generation, so only these need to wait
 // their turn behind one another. Everything else executes immediately (see
 // the 'command' socket handler above).
-const GENERATION_COMMAND_TYPES = new Set(['message', 'swipe', 'regenerate', 'continue']);
+const GENERATION_COMMAND_TYPES = new Set(['message', 'swipe', 'regenerate', 'continue', 'trigger-only']);
 
 function queueCommand(cmd) {
   commandQueue.push(cmd);
@@ -512,7 +512,8 @@ function executeCommand(cmd) {
     return;
   }
   switch (cmd.type) {
-    case 'message':         sendMessageAs(cmd.personaId, cmd.message); break;
+    case 'message':         sendMessageAs(cmd.personaId, cmd.message, { noTrigger: cmd.noTrigger }); break;
+    case 'trigger-only':    handleTriggerOnly(); break;
     case 'swipe':            handleSwipe(cmd.direction); break;
     case 'regenerate':       handleRegenerate(); break;
     case 'edit':              handleEdit(cmd.index, cmd.text); break;
@@ -555,8 +556,8 @@ function stQuoteArg(str) {
 
 // ──────────── Send message as persona (via STscript) ────────────
 
-async function sendMessageAs(personaId, message) {
-  console.log('[MP] Sending as persona:', personaId);
+async function sendMessageAs(personaId, message, { noTrigger = false } = {}) {
+  console.log('[MP] Sending as persona:', personaId, noTrigger ? '(round in progress, not triggering yet)' : '');
   const ctx = getContext();
 
   // Snap back to whoever's persona was active before this message, once
@@ -569,13 +570,30 @@ async function sendMessageAs(personaId, message) {
     : '';
 
   const safeMessage = stEscape(message);
-  const script = `/persona-set mode=lookup ${stQuoteArg(personaId)} | /send ${safeMessage} | /trigger${restore}`;
+  // noTrigger: mid-round action from a player who isn't the last to respond
+  // this turn — post their message so it shows up in order, but don't ask
+  // the AI to reply yet. The round's closing action (see 'trigger-only')
+  // fires the one /trigger everyone's action goes into.
+  const triggerPart = noTrigger ? '' : ' | /trigger';
+  const script = `/persona-set mode=lookup ${stQuoteArg(personaId)} | /send ${safeMessage}${triggerPart}${restore}`;
 
   try {
     await ctx.executeSlashCommandsWithOptions(script);
     console.log('[MP] Sent via STscript');
   } catch (e) {
     console.error('[MP] STscript send failed:', e);
+  }
+}
+
+// ──────────── Trigger-only (closing a round whose last player skipped) ────────────
+
+async function handleTriggerOnly() {
+  console.log('[MP] Round closed — firing /trigger for this round\'s submitted actions');
+  const ctx = getContext();
+  try {
+    await ctx.executeSlashCommandsWithOptions('/trigger');
+  } catch (e) {
+    console.warn('[MP] /trigger (round close) failed:', e);
   }
 }
 

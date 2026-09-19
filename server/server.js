@@ -165,6 +165,60 @@ let generationStatus = { generating: false, characterName: null };
 const onlineUsers = new Map(); // name → timestamp
 const PRESENCE_TIMEOUT = 12_000;
 
+// ──────────── Turn rounds ────────────
+// The group always plays bot / player / bot / player. There's no "start
+// round" button or GM role: a round opens itself the moment any connected
+// player acts (sends a message or explicitly skips), against whoever else
+// is online right then. Each individual action still posts to the tavern
+// right away (so messages appear one by one as usual) but doesn't trigger
+// the AI — only the very last player to respond does, so everyone's action
+// lands in the prompt before the AI replies once. A player who skips just
+// contributes nothing; if literally everyone skips, nothing is sent at all.
+const playerSocketIds = new Set(); // sockets that have sent at least one heartbeat (real web clients)
+let round = null; // { expectedIds: Set<socketId>, responded: Set<socketId>, hadAnyMessage: bool }
+
+function socketName(id) {
+  return io.sockets.sockets.get(id)?.data?.name || null;
+}
+
+function broadcastRoundStatus() {
+  if (!round) { io.emit('round-status', null); return; }
+  const waitingFor = [...round.expectedIds]
+    .filter((id) => !round.responded.has(id))
+    .map(socketName)
+    .filter(Boolean);
+  io.emit('round-status', { waitingFor, total: round.expectedIds.size });
+}
+
+function sendToHost(cmd) {
+  if (hostSocketId) io.to(hostSocketId).emit('command', cmd);
+  else io.emit('command', cmd); // no host yet — broadcast fallback, same as generic command routing
+}
+
+// Handles the two turn-taking commands ('message' and 'skip-turn'). Every
+// other command type bypasses this and goes straight to the host as before.
+function handleTurnAction(socket, cmd, type) {
+  if (!round) round = { expectedIds: new Set(playerSocketIds), responded: new Set(), hadAnyMessage: false };
+
+  round.expectedIds.add(socket.id); // a late joiner who acts still counts as responded, not left dangling
+  round.responded.add(socket.id);
+  const isLast = [...round.expectedIds].every((id) => round.responded.has(id));
+
+  if (type === 'message') {
+    round.hadAnyMessage = true;
+    sendToHost({ type: 'message', personaId: cmd.personaId, message: cmd.message, name: cmd.name, noTrigger: !isLast });
+  }
+
+  if (isLast) {
+    // The round is complete. If the closing action was a skip but someone
+    // else already sent a real message this round, the AI still needs to be
+    // asked to respond to those — fire the trigger on its own.
+    if (type !== 'message' && round.hadAnyMessage) sendToHost({ type: 'trigger-only' });
+    round = null;
+  }
+  broadcastRoundStatus();
+}
+
 // Single-host arbitration. The extension loads in EVERY SillyTavern tab (it's
 // in ST's shared extensions dir), so the keeper's headless tab and the user's
 // own tunnel'd tab can both be running it. If more than one acted as the
@@ -291,7 +345,17 @@ io.on('connection', (socket) => {
 
   // ── Command from web client → forward to ST extension ──
   socket.on('command', (cmd) => {
-    console.log('[WS] Command:', cmd.type || 'message');
+    const type = cmd.type || 'message';
+    console.log('[WS] Command:', type);
+
+    // 'message' and 'skip-turn' go through turn-round coordination instead
+    // of straight to the host — see handleTurnAction.
+    if (type === 'message' || type === 'skip-turn') {
+      handleTurnAction(socket, cmd, type);
+      socket.emit('command-ack', { type });
+      return;
+    }
+
     if (hostSocketId) {
       io.to(hostSocketId).emit('command', cmd);
     } else {
@@ -301,7 +365,7 @@ io.on('connection', (socket) => {
       io.emit('command', cmd);
     }
     // Ack back to sender with the command type
-    socket.emit('command-ack', { type: cmd.type || 'message' });
+    socket.emit('command-ack', { type });
   });
 
   // ── Heartbeat ──
@@ -315,6 +379,7 @@ io.on('connection', (socket) => {
     }
     socket.data.name = name;
     onlineUsers.set(name, Date.now());
+    playerSocketIds.add(socket.id);
     broadcastOnline();
   });
 
@@ -335,6 +400,18 @@ io.on('connection', (socket) => {
     if (socket.data.name) {
       onlineUsers.delete(socket.data.name);
       broadcastOnline();
+    }
+    playerSocketIds.delete(socket.id);
+    // Someone leaving mid-round shouldn't leave everyone else waiting on
+    // them forever — drop them from this round too, which may complete it.
+    if (round && round.expectedIds.has(socket.id) && !round.responded.has(socket.id)) {
+      round.expectedIds.delete(socket.id);
+      const isLast = [...round.expectedIds].every((id) => round.responded.has(id));
+      if (isLast) {
+        if (round.hadAnyMessage) sendToHost({ type: 'trigger-only' });
+        round = null;
+      }
+      broadcastRoundStatus();
     }
   });
 });

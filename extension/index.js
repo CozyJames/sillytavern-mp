@@ -9,10 +9,16 @@ import { user_avatar } from "../../../personas.js";
 // these two are just the fallback for a fresh, unconfigured checkout.
 let TARGET_URL = 'http://localhost:3000';
 let AUTH_TOKEN = '';
+// Any character tagged with this (case-insensitive) in SillyTavern's own tag
+// manager is left out of the character list sent to web clients — private/
+// NSFW characters you don't want players to see or pick from the panel.
+// Doesn't touch an already-active chat; only what's offered in the list.
+let HIDE_TAG = 'MP Hide';
 try {
   const cfg = await import('./config.local.js');
   if (cfg.TARGET_URL) TARGET_URL = cfg.TARGET_URL;
   if (cfg.AUTH_TOKEN) AUTH_TOKEN = cfg.AUTH_TOKEN;
+  if (cfg.HIDE_TAG) HIDE_TAG = cfg.HIDE_TAG;
 } catch (e) {
   console.warn('[MP] No config.local.js found, using defaults:', TARGET_URL);
 }
@@ -345,14 +351,35 @@ async function getContextTokens(ctx) {
   return reportedTokens;
 }
 
+// Character avatars carrying the HIDE_TAG tag (set via ST's own tag manager,
+// see HIDE_TAG's declaration) — recomputed on every call since tags can
+// change anytime, but it's a handful of string compares, not worth caching.
+function getHiddenAvatars(ctx) {
+  const hideTagIds = new Set(
+    (ctx.tags || [])
+      .filter(t => (t.name || '').trim().toLowerCase() === HIDE_TAG.trim().toLowerCase())
+      .map(t => t.id)
+  );
+  if (hideTagIds.size === 0) return new Set();
+  const hidden = new Set();
+  for (const c of ctx.characters || []) {
+    const tagIds = ctx.tagMap?.[c.avatar] || [];
+    if (tagIds.some(id => hideTagIds.has(id))) hidden.add(c.avatar);
+  }
+  return hidden;
+}
+
 async function buildSessionInfo() {
   const ctx = getContext();
+  const hiddenAvatars = getHiddenAvatars(ctx);
 
-  const characters = (ctx.characters || []).map(c => ({
-    id: c.avatar,
-    name: c.name,
-    avatarUrl: absoluteUrl(ctx.getThumbnailUrl('avatar', c.avatar)),
-  }));
+  const characters = (ctx.characters || [])
+    .filter(c => !hiddenAvatars.has(c.avatar))
+    .map(c => ({
+      id: c.avatar,
+      name: c.name,
+      avatarUrl: absoluteUrl(ctx.getThumbnailUrl('avatar', c.avatar)),
+    }));
 
   const currentChar = (ctx.characterId !== undefined && ctx.characters[ctx.characterId])
     ? ctx.characters[ctx.characterId]

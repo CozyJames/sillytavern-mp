@@ -50,6 +50,8 @@ Both are safe to re-run (they update the existing checkout rather than re-clonin
 
 Day-to-day VPS ops (updating, restarting, logs, common errors): [`deploy/README.md`](deploy/README.md).
 
+**Already set up manually on Windows** (repo cloned with git, `extension` folder copied into SillyTavern by hand) and just want to pull updates? Run `deploy\update-local.bat` — it asks once where your SillyTavern extension folder is (remembered for next time), then on every run: `git pull`s this checkout, reinstalls server dependencies if needed, and re-copies the updated extension files into place. Restart SillyTavern afterward to pick up the change.
+
 ### Manual setup
 
 ### 1. Install the extension

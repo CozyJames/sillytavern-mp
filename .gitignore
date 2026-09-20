@@ -4,3 +4,5 @@ npm-debug.log*
 .DS_Store
 *.log
 extension/config.local.js
+.mp-install-state
+deploy/.update-state.bat

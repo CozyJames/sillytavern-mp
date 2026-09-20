@@ -175,7 +175,9 @@ const PRESENCE_TIMEOUT = 12_000;
 // lands in the prompt before the AI replies once. A player who skips just
 // contributes nothing; if literally everyone skips, nothing is sent at all.
 // A message sent with `force: true` closes the round immediately instead —
-// for a player who doesn't want to wait on the rest of the group.
+// for a player who doesn't want to wait on the rest of the group. Deleting
+// your own message before the round closes un-counts your turn too, so you
+// can't write-then-delete to burn your slot without actually weighing in.
 const playerSocketIds = new Set(); // sockets that have sent at least one heartbeat (real web clients)
 let round = null; // { expectedIds: Set<socketId>, responded: Set<socketId>, hadAnyMessage: bool }
 
@@ -200,7 +202,7 @@ function sendToHost(cmd) {
 // Handles the two turn-taking commands ('message' and 'skip-turn'). Every
 // other command type bypasses this and goes straight to the host as before.
 function handleTurnAction(socket, cmd, type) {
-  if (!round) round = { expectedIds: new Set(playerSocketIds), responded: new Set(), hadAnyMessage: false };
+  if (!round) round = { expectedIds: new Set(playerSocketIds), responded: new Set(), hadAnyMessage: false, contributions: new Map() };
 
   round.expectedIds.add(socket.id); // a late joiner who acts still counts as responded, not left dangling
   round.responded.add(socket.id);
@@ -210,6 +212,11 @@ function handleTurnAction(socket, cmd, type) {
 
   if (type === 'message') {
     round.hadAnyMessage = true;
+    // Remembered so a delete of this exact message (see reopenRoundIfDeleted)
+    // can undo the "responded" credit it earned — otherwise a player could
+    // write, delete, and effectively skip while still counting as having
+    // acted, letting the round close without them ever really weighing in.
+    round.contributions.set(socket.id, { name: cmd.name, message: cmd.message });
     sendToHost({ type: 'message', personaId: cmd.personaId, message: cmd.message, name: cmd.name, noTrigger: !isLast });
   }
 
@@ -221,6 +228,27 @@ function handleTurnAction(socket, cmd, type) {
     round = null;
   }
   broadcastRoundStatus();
+}
+
+// A message deleted while the round it was sent in is still open shouldn't
+// keep counting as that player's turn — otherwise writing something, deleting
+// it, and having someone else act is indistinguishable from actually skipping,
+// except the round closes without ever really waiting on them. Matches by
+// name+text against what was recorded when they sent it, since chat indices
+// shift under deletes and the server doesn't have a more stable message id.
+function reopenRoundIfDeleted(index) {
+  if (!round || typeof index !== 'number') return;
+  const deleted = chatHistory[index];
+  if (!deleted) return;
+  for (const [id, contribution] of round.contributions) {
+    if (!round.responded.has(id)) continue;
+    if (contribution.name === deleted.name && contribution.message === deleted.mes) {
+      round.responded.delete(id);
+      round.contributions.delete(id);
+      broadcastRoundStatus();
+      return;
+    }
+  }
 }
 
 // Single-host arbitration. The extension loads in EVERY SillyTavern tab (it's
@@ -359,6 +387,8 @@ io.on('connection', (socket) => {
       socket.emit('command-ack', { type });
       return;
     }
+
+    if (type === 'delete') reopenRoundIfDeleted(cmd.index);
 
     if (hostSocketId) {
       io.to(hostSocketId).emit('command', cmd);

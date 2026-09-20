@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>SillyTavern MP Client</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Open+Sans:wght@400;600;700&family=Lora:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     /* Tokens lifted from SillyTavern's own default theme (public/style.css):
        --SmartThemeBodyColor, --SmartThemeEmColor, --SmartThemeQuoteColor
@@ -32,11 +35,16 @@
       --radius: 8px;
       --radius-sm: 5px;
       --shadow: 0 2px 14px rgba(0,0,0,0.5);
+      /* SillyTavern's own default theme font — overridden per-viewer from
+         the Display tab in the session panel (see FONT_OPTIONS in the
+         script below), saved to localStorage so it's per-player, not
+         shared. */
+      --font-family: "Noto Sans", Arial, Helvetica, sans-serif;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       height: 100%; margin: 0;
-      font-family: "Noto Sans", Arial, Helvetica, sans-serif;
+      font-family: var(--font-family);
       background: var(--bg-0);
       color: var(--text-primary);
       -webkit-font-smoothing: antialiased;
@@ -562,6 +570,7 @@
       <button class="panel-tab active" data-tab="character">Character</button>
       <button class="panel-tab" data-tab="model">Model &amp; Preset</button>
       <button class="panel-tab" data-tab="chats">Chats</button>
+      <button class="panel-tab" data-tab="display">Display</button>
     </div>
     <div class="panel-body">
       <div class="panel-tabpage" data-tabpage="character">
@@ -587,6 +596,12 @@
           <div class="panel-list" id="chat-list"><div class="panel-empty">Open to load past chats…</div></div>
         </div>
       </div>
+      <div class="panel-tabpage" data-tabpage="display" hidden>
+        <div class="panel-section">
+          <h3>Font</h3>
+          <select id="font-select" class="panel-select"></select>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -598,6 +613,36 @@
 
     const NAME_KEY = "stmp_character_name"; // legacy freeform name, used as a last-resort persona match
     const PERSONA_ID_KEY = "stmp_persona_id";
+    const FONT_KEY = "stmp_font";
+
+    // ═══════════════════════════════════
+    //  FONT (per-player, local — see Display tab)
+    // ═══════════════════════════════════
+
+    const FONT_OPTIONS = [
+      { id: "noto-sans", label: "Noto Sans (tavern default)", stack: '"Noto Sans", Arial, Helvetica, sans-serif' },
+      { id: "inter",     label: "Inter",                       stack: '"Inter", Arial, Helvetica, sans-serif' },
+      { id: "open-sans", label: "Open Sans",                   stack: '"Open Sans", Arial, Helvetica, sans-serif' },
+      { id: "lora",      label: "Lora (serif)",                stack: '"Lora", Georgia, "Times New Roman", serif' },
+    ];
+
+    function applyFont(id) {
+      const opt = FONT_OPTIONS.find(f => f.id === id) || FONT_OPTIONS[0];
+      document.documentElement.style.setProperty("--font-family", opt.stack);
+    }
+
+    function initFontSelect() {
+      const select = document.getElementById("font-select");
+      const saved = localStorage.getItem(FONT_KEY) || FONT_OPTIONS[0].id;
+      select.innerHTML = FONT_OPTIONS.map(f => `<option value="${f.id}">${esc(f.label)}</option>`).join("");
+      select.value = saved;
+      applyFont(saved);
+      select.addEventListener("change", () => {
+        localStorage.setItem(FONT_KEY, select.value);
+        applyFont(select.value);
+      });
+    }
+    initFontSelect();
 
     // ═══════════════════════════════════
     //  STATE

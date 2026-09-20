@@ -20,6 +20,7 @@ Based on [LiamDobbelaere/sillytavern-mp](https://github.com/LiamDobbelaere/silly
 - **Online presence & typing indicators** - see who's connected and who's typing
 - **Markdown rendering** - proper formatting with bold, italic, dialogue highlighting
 - **Persistent persona** - your selected persona is remembered across page refreshes
+- **Font choice** - pick your reading font (tavern's own default, or a couple of popular alternatives) in the Display tab, remembered per-player
 
 ## How it works
 

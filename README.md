@@ -146,6 +146,7 @@ Both settings work independently — you can enable just the login, just TLS, or
 | Action | Shortcut |
 |---|---|
 | Send message | Enter / Send button |
+| Send now, don't wait for others this round | Alt+Enter / ⚡➤ button |
 | Regenerate | Ctrl+Enter |
 | Swipe left/right | ◂ ▸ buttons on last AI message |
 | Edit message | ✎ button (hover over message) |

@@ -174,6 +174,8 @@ const PRESENCE_TIMEOUT = 12_000;
 // the AI — only the very last player to respond does, so everyone's action
 // lands in the prompt before the AI replies once. A player who skips just
 // contributes nothing; if literally everyone skips, nothing is sent at all.
+// A message sent with `force: true` closes the round immediately instead —
+// for a player who doesn't want to wait on the rest of the group.
 const playerSocketIds = new Set(); // sockets that have sent at least one heartbeat (real web clients)
 let round = null; // { expectedIds: Set<socketId>, responded: Set<socketId>, hadAnyMessage: bool }
 
@@ -202,7 +204,9 @@ function handleTurnAction(socket, cmd, type) {
 
   round.expectedIds.add(socket.id); // a late joiner who acts still counts as responded, not left dangling
   round.responded.add(socket.id);
-  const isLast = [...round.expectedIds].every((id) => round.responded.has(id));
+  // A forced message (player explicitly doesn't want to wait for the rest)
+  // closes the round right away, same as if everyone else had responded.
+  const isLast = cmd.force || [...round.expectedIds].every((id) => round.responded.has(id));
 
   if (type === 'message') {
     round.hadAnyMessage = true;

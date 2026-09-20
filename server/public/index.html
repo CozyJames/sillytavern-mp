@@ -306,6 +306,17 @@
     #skip-btn:hover { color: var(--text-primary); border-color: var(--border-hover); }
     #skip-btn:disabled { opacity: 0.3; cursor: default; }
 
+    #force-send-btn {
+      flex: 0 0 auto;
+      width: 30px; height: 30px;
+      background: none; color: var(--text-muted); border: none;
+      border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s;
+      font-size: 12px; display: flex; align-items: center; justify-content: center;
+      opacity: 0.7;
+    }
+    #force-send-btn:hover { opacity: 1; color: var(--amber); }
+    #force-send-btn:disabled { opacity: 0.3; cursor: default; }
+
     /* ═══════ TOAST ═══════ */
     #toast-container {
       position: fixed; top: 45px; left: 50%;
@@ -474,6 +485,7 @@
       #persona-select { height: 40px; font-size: 14px; max-width: 96px; }
       #send-btn { width: 44px; height: 44px; font-size: 19px; }
       #skip-btn { height: 40px; padding: 0 8px; }
+      #force-send-btn { width: 26px; height: 40px; font-size: 11px; }
 
       /* Bigger, finger-friendly tap targets (~44px is the usual minimum). */
       .icon-btn { width: 40px; height: 40px; font-size: 17px; }
@@ -520,8 +532,9 @@
     <div id="round-status"></div>
     <div id="chat-input">
       <select id="persona-select" title="Send as"><option value="">…</option></select>
-      <textarea id="message" placeholder="Type a message…" rows="1" title="Enter — send · Shift+Enter — new line · Ctrl+Enter — regenerate"></textarea>
+      <textarea id="message" placeholder="Type a message…" rows="1" title="Enter — send · Shift+Enter — new line · Ctrl+Enter — regenerate · Alt+Enter — send now, don't wait for others"></textarea>
       <button id="skip-btn" title="Skip your turn this round">skip</button>
+      <button id="force-send-btn" title="Send now — don't wait for others this round (Alt+Enter)">⚡➤</button>
       <button id="send-btn" title="Send (Enter)">➤</button>
     </div>
   </div>
@@ -749,6 +762,7 @@
       textEl.textContent = characterName ? `${characterName} is generating…` : 'Generating…';
       messageInput.disabled = isGenerating;
       document.getElementById('send-btn').disabled = isGenerating;
+      document.getElementById('force-send-btn').disabled = isGenerating;
       skipBtn.disabled = isGenerating;
       if (currentHistory.length) renderChat(currentHistory);
     });
@@ -1400,6 +1414,7 @@
 
     const messageInput = document.getElementById("message");
     const sendBtn = document.getElementById("send-btn");
+    const forceSendBtn = document.getElementById("force-send-btn");
     const skipBtn = document.getElementById("skip-btn");
 
     function resizeMessageInput() {
@@ -1407,19 +1422,23 @@
       messageInput.style.height = Math.min(200, messageInput.scrollHeight) + "px";
     }
 
-    function doSend() {
+    // force=true closes the round immediately instead of waiting for
+    // everyone else currently online to respond or skip — for when you just
+    // want to poke the AI yourself without holding up the group.
+    function doSend(force) {
       const msg = messageInput.value.trim();
       if (!msg || isGenerating) return;
       const personaId = getMyPersonaId();
       if (!personaId) { showToast('⚠ No persona selected', 4000, 'toast-warning'); return; }
       const name = getMyPersonaName();
-      sendCmd({ type: "message", personaId, message: msg, name });
+      sendCmd({ type: "message", personaId, message: msg, name, force: !!force });
       appendGhost(name, msg);
       messageInput.value = "";
       resizeMessageInput();
     }
 
-    sendBtn.addEventListener("click", doSend);
+    sendBtn.addEventListener("click", () => doSend(false));
+    forceSendBtn.addEventListener("click", () => doSend(true));
 
     // Explicitly decline to act this turn — a deliberate choice, not just an
     // empty Enter press (which stays a harmless no-op, see doSend above).
@@ -1437,13 +1456,18 @@
         sendCmd({ type: "regenerate" }, "⟳ Regenerating…");
         return;
       }
+      if (e.key === "Enter" && e.altKey) {
+        e.preventDefault();
+        doSend(true);
+        return;
+      }
       if (e.key === "Enter" && e.shiftKey) {
         // Let the browser insert a newline naturally
         return;
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        doSend();
+        doSend(false);
       }
     });
 

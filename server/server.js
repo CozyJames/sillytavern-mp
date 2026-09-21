@@ -30,7 +30,7 @@ const io = new Server(server, {
 // the same machine), but note that's usually NOT true for the ST extension:
 // it runs inside whatever browser is displaying the tavern, which is
 // normally a remote machine (the host's own laptop) even when the tavern
-// and this relay both run on the same VPS — so it needs its own way in.
+// and this relay both run on the same VPS, so it needs its own way in.
 // Set MP_EXTENSION_TOKEN to a shared secret and put the same value in the
 // extension's AUTH_TOKEN constant to let it connect without a browser login.
 const AUTH_USER = process.env.MP_AUTH_USER;
@@ -127,13 +127,13 @@ if (authEnabled) {
     next(new Error('unauthorized'));
   });
 } else {
-  console.warn('[MP] MP_AUTH_USER / MP_AUTH_PASS not set — the server has NO authentication. Do not expose it to the internet like this.');
+  console.warn('[MP] MP_AUTH_USER / MP_AUTH_PASS not set. The server has NO authentication. Do not expose it to the internet like this.');
 }
 
 // ──────────── Avatar proxy ────────────
 // The extension no longer sends absolute avatar URLs (they'd point at
-// whatever origin its own browser used to reach ST — e.g. localhost:8000
-// through an SSH tunnel — which is meaningless, and often unreachable/
+// whatever origin its own browser used to reach ST, e.g. localhost:8000
+// through an SSH tunnel, which is meaningless, and often unreachable/
 // blocked by the viewer's browser, for anyone else). Instead it sends ST's
 // own relative /thumbnail path, and we fetch it server-side: this server
 // and ST normally run on the same box, so this is a plain loopback request
@@ -171,10 +171,10 @@ const PRESENCE_TIMEOUT = 12_000;
 // player acts (sends a message or explicitly skips), against whoever else
 // is online right then. Each individual action still posts to the tavern
 // right away (so messages appear one by one as usual) but doesn't trigger
-// the AI — only the very last player to respond does, so everyone's action
+// the AI: only the very last player to respond does, so everyone's action
 // lands in the prompt before the AI replies once. A player who skips just
 // contributes nothing; if literally everyone skips, nothing is sent at all.
-// A message sent with `force: true` closes the round immediately instead —
+// A message sent with `force: true` closes the round immediately instead,
 // for a player who doesn't want to wait on the rest of the group. Deleting
 // your own message before the round closes un-counts your turn too, so you
 // can't write-then-delete to burn your slot without actually weighing in.
@@ -196,7 +196,7 @@ function broadcastRoundStatus() {
 
 function sendToHost(cmd) {
   if (hostSocketId) io.to(hostSocketId).emit('command', cmd);
-  else io.emit('command', cmd); // no host yet — broadcast fallback, same as generic command routing
+  else io.emit('command', cmd); // no host yet, broadcast fallback, same as generic command routing
 }
 
 // Handles the two turn-taking commands ('message' and 'skip-turn'). Every
@@ -213,7 +213,7 @@ function handleTurnAction(socket, cmd, type) {
   if (type === 'message') {
     round.hadAnyMessage = true;
     // Remembered so a delete of this exact message (see reopenRoundIfDeleted)
-    // can undo the "responded" credit it earned — otherwise a player could
+    // can undo the "responded" credit it earned, otherwise a player could
     // write, delete, and effectively skip while still counting as having
     // acted, letting the round close without them ever really weighing in.
     round.contributions.set(socket.id, { name: cmd.name, message: cmd.message });
@@ -223,7 +223,7 @@ function handleTurnAction(socket, cmd, type) {
   if (isLast) {
     // The round is complete. If the closing action was a skip but someone
     // else already sent a real message this round, the AI still needs to be
-    // asked to respond to those — fire the trigger on its own.
+    // asked to respond to those: fire the trigger on its own.
     if (type !== 'message' && round.hadAnyMessage) sendToHost({ type: 'trigger-only' });
     round = null;
   }
@@ -231,7 +231,7 @@ function handleTurnAction(socket, cmd, type) {
 }
 
 // A message deleted while the round it was sent in is still open shouldn't
-// keep counting as that player's turn — otherwise writing something, deleting
+// keep counting as that player's turn, otherwise writing something, deleting
 // it, and having someone else act is indistinguishable from actually skipping,
 // except the round closes without ever really waiting on them. Matches by
 // name+text against what was recorded when they sent it, since chat indices
@@ -254,7 +254,7 @@ function reopenRoundIfDeleted(index) {
 // Single-host arbitration. The extension loads in EVERY SillyTavern tab (it's
 // in ST's shared extensions dir), so the keeper's headless tab and the user's
 // own tunnel'd tab can both be running it. If more than one acted as the
-// relay's source of truth they'd fight — different active character/chat per
+// relay's source of truth they'd fight: different active character/chat per
 // tab, commands landing in the wrong one, state flip-flopping. So exactly one
 // registered extension is the host at a time; every other is told to stand
 // down (see the extension's 'extension-role' handling). The keeper registers
@@ -293,7 +293,7 @@ function ensureRegistered(socket) {
 }
 
 // The extension always pushes the FULL chat history (that traffic stays
-// local/same-box, it's cheap) — but re-broadcasting all of it to every
+// local/same-box, it's cheap), but re-broadcasting all of it to every
 // player's browser on every single change, especially the rapid-fire
 // updates during streaming generation, means resending an ever-growing
 // payload (a long-running RP chat can be hundreds of messages) many times
@@ -381,7 +381,7 @@ io.on('connection', (socket) => {
     console.log('[WS] Command:', type);
 
     // 'message' and 'skip-turn' go through turn-round coordination instead
-    // of straight to the host — see handleTurnAction.
+    // of straight to the host, see handleTurnAction.
     if (type === 'message' || type === 'skip-turn') {
       handleTurnAction(socket, cmd, type);
       socket.emit('command-ack', { type });
@@ -393,7 +393,7 @@ io.on('connection', (socket) => {
     if (hostSocketId) {
       io.to(hostSocketId).emit('command', cmd);
     } else {
-      // No host elected yet (fresh server start, extension reconnecting) —
+      // No host elected yet (fresh server start, extension reconnecting):
       // fall back to broadcasting so the command still has a chance of
       // arriving. Non-host extensions ignore commands, so this is safe.
       io.emit('command', cmd);
@@ -406,7 +406,7 @@ io.on('connection', (socket) => {
   socket.on('heartbeat', ({ name }) => {
     if (!name) return;
     // A client's resolved name can change after connecting (persona list
-    // loads after the first heartbeat as "Guest", or they switch persona) —
+    // loads after the first heartbeat as "Guest", or they switch persona):
     // drop the stale entry instead of leaving it to linger until it times out.
     if (socket.data.name && socket.data.name !== name) {
       onlineUsers.delete(socket.data.name);
@@ -437,7 +437,7 @@ io.on('connection', (socket) => {
     }
     playerSocketIds.delete(socket.id);
     // Someone leaving mid-round shouldn't leave everyone else waiting on
-    // them forever — drop them from this round too, which may complete it.
+    // them forever, drop them from this round too, which may complete it.
     if (round && round.expectedIds.has(socket.id) && !round.responded.has(socket.id)) {
       round.expectedIds.delete(socket.id);
       const isLast = [...round.expectedIds].every((id) => round.responded.has(id));

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SillyTavern Multiplayer — remote/VPS installer.
+# SillyTavern Multiplayer: remote/VPS installer.
 #
 # Sets up the relay server, TLS + login, the extension symlink into your
 # SillyTavern install, and (optionally) the headless-browser keeper that
@@ -42,14 +42,14 @@ ask_yn() { # ask_yn <prompt> <default: y|n> -> returns 0 for yes, 1 for no
 if [ "$(id -u)" -eq 0 ]; then RUN_AS_ROOT=1; PRIV=""; else RUN_AS_ROOT=0; PRIV="sudo"; fi
 
 for cmd in node npm git openssl; do
-  command -v "$cmd" >/dev/null 2>&1 || { warn "'$cmd' is required but not found — install it first."; exit 1; }
+  command -v "$cmd" >/dev/null 2>&1 || { warn "'$cmd' is required but not found. Install it first."; exit 1; }
 done
 if [ ! -d /run/systemd/system ]; then
-  warn "systemd doesn't appear to be running on this machine — this script sets up systemd services, and needs it. Use install-local.sh instead if this is your own PC, not a systemd-based server."
+  warn "systemd doesn't appear to be running on this machine. This script sets up systemd services, and needs it. Use install-local.sh instead if this is your own PC, not a systemd-based server."
   exit 1
 fi
 
-echo "SillyTavern Multiplayer — remote/VPS install"
+echo "SillyTavern Multiplayer: remote/VPS install"
 echo "This sets up the relay server + web client, TLS, login, the extension"
 echo "token, and (optionally) the 24/7 headless-browser keeper."
 echo
@@ -61,14 +61,14 @@ ST_PATH="$(ask 'Path to your SillyTavern install' "$HOME/SillyTavern")"
 ST_USER="$(ask "SillyTavern user folder (usually default-user)" "default-user")"
 
 if [ ! -d "$ST_PATH/data" ]; then
-  warn "'$ST_PATH/data' doesn't exist — is that really your SillyTavern install path?"
+  warn "'$ST_PATH/data' doesn't exist. Is that really your SillyTavern install path?"
   ask_yn "Continue anyway?" n || exit 1
 fi
 
 # ──────────── Clone or update ────────────
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-  info "Found an existing checkout at $INSTALL_DIR — updating it"
+  info "Found an existing checkout at $INSTALL_DIR, updating it"
   git -C "$INSTALL_DIR" pull --ff-only
 else
   info "Cloning into $INSTALL_DIR"
@@ -94,7 +94,7 @@ if ask_yn "Enable HTTPS (self-signed certificate, no domain needed)?" y; then
   USE_TLS=1
   mkdir -p "$CERT_DIR"
   if [ -f "$CERT_DIR/cert.pem" ] && [ -f "$CERT_DIR/key.pem" ]; then
-    info "Certificate already exists at $CERT_DIR — keeping it"
+    info "Certificate already exists at $CERT_DIR, keeping it"
   else
     info "Generating a self-signed certificate for $PUBLIC_ADDR"
     openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
@@ -104,7 +104,7 @@ if ask_yn "Enable HTTPS (self-signed certificate, no domain needed)?" y; then
   fi
 else
   USE_TLS=0
-  warn "Running without HTTPS — fine on a private LAN/VPN, risky on the open internet."
+  warn "Running without HTTPS: fine on a private LAN/VPN, risky on the open internet."
 fi
 SCHEME="http"; [ "$USE_TLS" = "1" ] && SCHEME="https"
 
@@ -120,11 +120,11 @@ if ask_yn "Require a login for anyone connecting from outside this machine?" y; 
 else
   MP_AUTH_USER=""
   MP_AUTH_PASS=""
-  warn "No login — anyone with the URL can join. Fine on a private LAN/VPN only."
+  warn "No login: anyone with the URL can join. Fine on a private LAN/VPN only."
 fi
 
 # Extension token: always generated. It's how the extension (which the
-# server can't treat as "local" — see README) authenticates without going
+# server can't treat as "local", see README) authenticates without going
 # through the login page.
 MP_EXTENSION_TOKEN="$(openssl rand -hex 24)"
 
@@ -155,7 +155,7 @@ if ask_yn "Install the headless-browser keeper (keeps the extension connected wi
     $PRIV apt-get update -qq
     $PRIV apt-get install -y chromium >/dev/null
   else
-    warn "No apt-get found — install a Chromium/Chrome browser manually, then set CHROME_PATH in the keeper's systemd unit."
+    warn "No apt-get found. Install a Chromium/Chrome browser manually, then set CHROME_PATH in the keeper's systemd unit."
   fi
   info "Installing keeper dependencies"
   (cd "$INSTALL_DIR/keeper" && npm install --omit=dev --no-audit --no-fund)

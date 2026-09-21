@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# SillyTavern Multiplayer — uninstaller.
+# SillyTavern Multiplayer: uninstaller.
 #
 # Removes what install.sh/install-local.sh set up: systemd units, the
 # extension symlink inside SillyTavern, and (only if you confirm) the
-# cloned repo itself. Never touches SillyTavern, Node, or Chromium —
+# cloned repo itself. Never touches SillyTavern, Node, or Chromium:
 # those are shared system resources, not this project's to remove.
 #
 # Usage:
@@ -38,7 +38,7 @@ done
 if [ -z "$STATE_FILE" ]; then
   warn "Couldn't find a .mp-install-state file (created by install.sh/install-local.sh)."
   read -r -p "Path to the sillytavern-mp checkout: " dir
-  [ -f "$dir/.mp-install-state" ] || { warn "No .mp-install-state there either — nothing to go on, stopping."; exit 1; }
+  [ -f "$dir/.mp-install-state" ] || { warn "No .mp-install-state there either, nothing to go on, stopping."; exit 1; }
   STATE_FILE="$dir/.mp-install-state"
 fi
 
@@ -67,8 +67,8 @@ for unit in sillytavern-mp tavern-keeper; do
   fi
 done
 # A systemctl failure here (e.g. no systemd on this box) must not abort the
-# rest of the cleanup below — the symlink/repo removal still needs to run.
-[ "$HAD_UNIT" = "1" ] && { $PRIV systemctl daemon-reload || warn "systemctl daemon-reload failed — you may need to do that manually."; }
+# rest of the cleanup below: the symlink/repo removal still needs to run.
+[ "$HAD_UNIT" = "1" ] && { $PRIV systemctl daemon-reload || warn "systemctl daemon-reload failed. You may need to do that manually."; }
 
 # ──────────── Extension symlink ────────────
 
@@ -85,7 +85,7 @@ if ask_yn "Also delete the checkout at $INSTALL_DIR (repo, certs, config.local.j
   rm -rf "$INSTALL_DIR"
   info "Deleted $INSTALL_DIR"
 else
-  info "Left $INSTALL_DIR in place — only the running services/link were removed."
+  info "Left $INSTALL_DIR in place. Only the running services/link were removed."
 fi
 
 echo

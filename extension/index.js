@@ -5,12 +5,12 @@ import { user_avatar } from "../../../personas.js";
 
 // Deployment-specific values live in config.local.js (gitignored) so a
 // `git pull` never conflicts with your local TARGET_URL/AUTH_TOKEN edits.
-// Copy config.local.example.js to config.local.js and fill it in there —
+// Copy config.local.example.js to config.local.js and fill it in there;
 // these two are just the fallback for a fresh, unconfigured checkout.
 let TARGET_URL = 'http://localhost:3000';
 let AUTH_TOKEN = '';
 // Any character tagged with this (case-insensitive) in SillyTavern's own tag
-// manager is left out of the character list sent to web clients — private/
+// manager is left out of the character list sent to web clients: private/
 // NSFW characters you don't want players to see or pick from the panel.
 // Doesn't touch an already-active chat; only what's offered in the list.
 let HIDE_TAG = 'MP Hide';
@@ -32,7 +32,7 @@ let processing = false;
 // Single-host arbitration. The extension loads in EVERY SillyTavern browser
 // tab (it lives in ST's shared extensions dir), so the keeper's headless tab
 // AND your own tunnel'd tab can both be running it at once. If more than one
-// acted as the relay's source of truth they'd fight — each tab has its own
+// acted as the relay's source of truth they'd fight: each tab has its own
 // active character/chat, so commands land in the wrong tab, generation runs
 // as the wrong character, and state flip-flops. The relay server therefore
 // designates exactly one extension as the host; every other instance is told
@@ -55,15 +55,15 @@ const IS_KEEPER = (() => {
 // chat log become available at different times and one must not block the
 // other:
 //
-// stReady — set on APP_READY, once SillyTavern has booted and its character
+// stReady: set on APP_READY, once SillyTavern has booted and its character
 // list is populated. Gates pushSessionInfo (characters, personas, presets).
 // This does NOT depend on a chat being open: the keeper's tab often sits at
 // the character-select screen with no active chat, and the web client still
 // needs the character list so a player can pick one. Gating the list on a
-// chat being loaded was a bug — it left the web client stuck on "Waiting for
+// chat being loaded was a bug: it left the web client stuck on "Waiting for
 // extension…" whenever no chat was open.
 //
-// chatConfirmedLoaded — set on CHAT_CHANGED, once a specific chat has actually
+// chatConfirmedLoaded: set on CHAT_CHANGED, once a specific chat has actually
 // finished loading. Gates pushChatHistory only, so we never broadcast an empty
 // chat during the load storm right after a fresh page load (e.g. keeper's tab
 // reloading) that then flips to the real chat a moment later.
@@ -87,7 +87,7 @@ function boot() {
     connectSocket();
   };
   script.onerror = () => {
-    console.error('[MP] Failed to load socket.io client from', TARGET_URL, '— is the MP server running and reachable?');
+    console.error('[MP] Failed to load socket.io client from', TARGET_URL, ': is the MP server running and reachable?');
   };
   document.head.appendChild(script);
 }
@@ -119,7 +119,7 @@ function connectSocket() {
     // half-upgraded deploy still works instead of going silent.
     setTimeout(() => {
       if (!roleReceived && socket && socket.connected) {
-        console.warn('[MP] No role from server — assuming host (old server?)');
+        console.warn('[MP] No role from server, assuming host (old server?)');
         becomeHost();
       }
     }, 3000);
@@ -138,18 +138,18 @@ function connectSocket() {
       console.log('[MP] Server designated us HOST');
       becomeHost();
     } else {
-      console.log('[MP] Server designated us follower — standing down');
+      console.log('[MP] Server designated us follower, standing down');
       isHost = false;
     }
   });
 
   // ── Receive commands from web clients instantly ──
   socket.on('command', (cmd) => {
-    if (!isHost) return; // followers never execute — only the host acts
+    if (!isHost) return; // followers never execute, only the host acts
     console.log('[MP] Received command:', cmd.type || 'message');
     // Only commands that actually trigger/extend AI generation need to be
     // serialized against each other (so two players' /trigger calls can't
-    // race). Everything else — stop, delete, edit, switching chats, etc. —
+    // race). Everything else (stop, delete, edit, switching chats, etc.)
     // runs immediately: queuing it behind a prior message's cooldown would
     // make e.g. Stop or Delete sit unresponsive for up to 10 seconds.
     if (GENERATION_COMMAND_TYPES.has(cmd.type || 'message')) {
@@ -160,7 +160,7 @@ function connectSocket() {
   });
 
   // Start pushing chat history + session info. This is a slow safety-net
-  // poll only — real changes (new/edited/deleted messages, chat switches)
+  // poll only: real changes (new/edited/deleted messages, chat switches)
   // are covered by event listeners below, and mid-stream token updates are
   // covered by the STREAM_TOKEN_RECEIVED hook (see below), which reacts to
   // real activity instead of guessing an interval.
@@ -186,7 +186,7 @@ function becomeHost() {
 
 // ──────────── Push chat history to server ────────────
 
-// Grab ST's own rendered HTML for each message — this already has
+// Grab ST's own rendered HTML for each message: this already has
 // markdown/HTML formatting, macros ({{getvar::x}}, {{char}}, etc.) resolved,
 // and any display Regex scripts applied, exactly as SillyTavern shows them.
 // Also grabs the reasoning ("thinking") block, if the model/message has one.
@@ -194,7 +194,7 @@ function becomeHost() {
 // message content itself (not just the index), so it self-invalidates:
 // an edit, swipe, or a delete shifting every later index all change what's
 // stored at that position, which is caught by the mes/swipe_id comparison
-// below — no need to manually clear this from every command handler.
+// below, no need to manually clear this from every command handler.
 const renderedCache = new Map();
 
 function getEnrichedChat() {
@@ -204,7 +204,7 @@ function getEnrichedChat() {
   for (let i = 0; i < chat.length; i++) {
     const msg = chat[i];
     const cached = renderedCache.get(i);
-    // Always re-query the last couple of messages — one of them may be
+    // Always re-query the last couple of messages: one of them may be
     // actively streaming, so its DOM content can change without msg.mes
     // itself changing until the stream finishes.
     const isTail = i >= lastIdx - 1;
@@ -246,9 +246,9 @@ function pushChatHistory() {
 
 // Deliberately NOT prefixed with window.location.origin: that would be
 // whatever origin this extension's own browser used to reach ST (e.g.
-// localhost:8000 through an SSH tunnel), which is meaningless — and often
-// blocked outright by the viewer's browser (Private/Local Network Access)
-// — for any other player's browser. The MP server proxies /thumbnail
+// localhost:8000 through an SSH tunnel), which is meaningless (and often
+// blocked outright by the viewer's browser via Private/Local Network Access)
+// for any other player's browser. The MP server proxies /thumbnail
 // itself (see server.js), fetching it server-side from ST directly.
 function absoluteUrl(relativePath) {
   return relativePath || null;
@@ -256,8 +256,8 @@ function absoluteUrl(relativePath) {
 
 // getContext().maxContext mirrors ST's internal `max_context` variable,
 // which is only kept up to date for kobold/text-generation-webui backends.
-// For chat-completion (OpenAI-compatible) connections — what any proxy/
-// aggregator uses — the real limit lives in chatCompletionSettings
+// For chat-completion (OpenAI-compatible) connections, which is what any
+// proxy/aggregator uses, the real limit lives in chatCompletionSettings
 // (oai_settings).openai_max_context instead; ST's own getMaxContextTokens()
 // branches on mainApi the same way, it's just not exposed through
 // getContext() itself. Without this, every chat-completion connection
@@ -273,11 +273,11 @@ function getRealMaxContext(ctx) {
 // (proxy/aggregator) backends ST counts tokens via a real backend request,
 // one per message. buildSessionInfo can run several times a second during
 // streaming, so counting every message every time would flood the backend.
-// Some proxies also 403 the tokenize endpoint intermittently — so a given
+// Some proxies also 403 the tokenize endpoint intermittently, so a given
 // attempt can fail even though the endpoint works most of the time.
 //
 // Strategy: throttle real counting to once every few seconds (kills the
-// flood while still retrying), and NEVER permanently give up — every
+// flood while still retrying), and NEVER permanently give up: every
 // throttled round tries a real count again, so the meter self-heals the
 // moment the endpoint answers. A failed round falls back to the last real
 // count we got (so the meter doesn't drop to 0 or flicker); only if we've
@@ -308,7 +308,7 @@ async function getContextTokens(ctx) {
 
   // Probe with a SINGLE request first. ST's tokenize endpoint
   // (/api/tokenizers/openai/count) is CSRF-protected and, on some setups,
-  // systematically 403s our calls — in which case counting every message
+  // systematically 403s our calls, in which case counting every message
   // would fire 100+ doomed requests per round (log spam + latency, e.g. on
   // character switch). The 403 is all-or-nothing, so one probe reliably
   // predicts the rest: if it fails, fall back to an estimate immediately
@@ -322,12 +322,12 @@ async function getContextTokens(ctx) {
       try {
         const status = e?.status ?? e?.jqXHR?.status;
         const body = (e?.responseText ?? e?.jqXHR?.responseText ?? e?.message ?? String(e));
-        console.warn('[MP] token counting unavailable — status:', status, 'body:', String(body).slice(0, 200).replace(/\s+/g, ' '));
+        console.warn('[MP] token counting unavailable, status:', status, 'body:', String(body).slice(0, 200).replace(/\s+/g, ' '));
       } catch (_) {
         console.warn('[MP] token counting unavailable (unloggable error shape)');
       }
     }
-    // Endpoint refused the probe — don't hammer it with the full chat.
+    // Endpoint refused the probe, don't hammer it with the full chat.
     if (lastRealTokens !== null) {
       reportedTokens = lastRealTokens; // keep the last accurate value if we had one
     } else {
@@ -337,7 +337,7 @@ async function getContextTokens(ctx) {
     return reportedTokens;
   }
 
-  // Probe succeeded — the endpoint is answering, so count the whole chat.
+  // Probe succeeded: the endpoint is answering, so count the whole chat.
   try {
     const counts = await Promise.all(chat.map(m => ctx.getTokenCountAsync(m.mes || '')));
     lastRealTokens = counts.reduce((sum, n) => sum + n, 0);
@@ -352,7 +352,7 @@ async function getContextTokens(ctx) {
 }
 
 // Character avatars carrying the HIDE_TAG tag (set via ST's own tag manager,
-// see HIDE_TAG's declaration) — recomputed on every call since tags can
+// see HIDE_TAG's declaration), recomputed on every call since tags can
 // change anytime, but it's a handful of string compares, not worth caching.
 function getHiddenAvatars(ctx) {
   const hideTagIds = new Set(
@@ -510,7 +510,7 @@ function processNext() {
   const cmd = commandQueue.shift();
   executeCommand(cmd);
   // Move on as soon as generation has actually finished instead of always
-  // waiting out the old worst-case fixed delay — a fast model/API done in
+  // waiting out the old worst-case fixed delay: a fast model/API done in
   // 1-2s no longer blocks the next queued player action for up to 10s.
   // Still caps at the same delay as before as a safety net, so this can
   // only ever be faster, never slower.
@@ -588,7 +588,7 @@ async function sendMessageAs(personaId, message, { noTrigger = false } = {}) {
   const ctx = getContext();
 
   // Snap back to whoever's persona was active before this message, once
-  // it's sent — otherwise the tavern is left showing the last remote
+  // it's sent, otherwise the tavern is left showing the last remote
   // player's persona indefinitely, which is wrong if the host is typing
   // directly into ST themselves, or just looking at their own screen.
   const previousPersonaId = user_avatar;
@@ -598,7 +598,7 @@ async function sendMessageAs(personaId, message, { noTrigger = false } = {}) {
 
   const safeMessage = stEscape(message);
   // noTrigger: mid-round action from a player who isn't the last to respond
-  // this turn — post their message so it shows up in order, but don't ask
+  // this turn: post their message so it shows up in order, but don't ask
   // the AI to reply yet. The round's closing action (see 'trigger-only')
   // fires the one /trigger everyone's action goes into.
   const triggerPart = noTrigger ? '' : ' | /trigger';
@@ -615,7 +615,7 @@ async function sendMessageAs(personaId, message, { noTrigger = false } = {}) {
 // ──────────── Trigger-only (closing a round whose last player skipped) ────────────
 
 async function handleTriggerOnly() {
-  console.log('[MP] Round closed — firing /trigger for this round\'s submitted actions');
+  console.log('[MP] Round closed, firing /trigger for this round\'s submitted actions');
   const ctx = getContext();
   try {
     await ctx.executeSlashCommandsWithOptions('/trigger');
@@ -714,7 +714,7 @@ async function handleDelete(index) {
 
 // SillyTavern's own /stop command just calls context.stopGeneration() under
 // the hood, and its docs note it can't run from the visible chat input box
-// during generation — calling the context function directly sidesteps that
+// during generation: calling the context function directly sidesteps that
 // UI-only restriction, which doesn't apply to a programmatic extension call.
 function handleStop() {
   console.log('[MP] Stop generation');
@@ -769,7 +769,7 @@ async function handleNewChat() {
   pushSessionInfo();
 }
 
-// ──────────── Load a past chat (native context API — no STscript equivalent) ────────────
+// ──────────── Load a past chat (native context API, no STscript equivalent) ────────────
 
 async function handleLoadChat(fileName) {
   console.log('[MP] Load chat:', fileName);
@@ -786,7 +786,7 @@ async function handleLoadChat(fileName) {
   pushSessionInfo();
 }
 
-// ──────────── Delete a past chat (native REST endpoint — no STscript equivalent) ────────────
+// ──────────── Delete a past chat (native REST endpoint, no STscript equivalent) ────────────
 
 async function handleDeleteChat(fileName) {
   console.log('[MP] Delete chat:', fileName);
@@ -822,7 +822,7 @@ async function handleDeleteChat(fileName) {
 // ──────────── Model selection ────────────
 
 // ST doesn't expose "the list of models for the active connection" through
-// getContext() — its own /model slash command reads it straight out of the
+// getContext(): its own /model slash command reads it straight out of the
 // matching settings-panel DOM control (a <select>, or an <input> with a
 // <datalist>, depending on API/source), so we mirror that same lookup
 // rather than reimplementing model-list fetching per API. This map is
@@ -980,15 +980,15 @@ eventSource.on(event_types.MESSAGE_RECEIVED, () => {
   // Force push on new messages for faster sync
   lastChatStr = '';
   pushChatHistory();
-  // Retry shortly after — DOM render can lag slightly behind this event
+  // Retry shortly after: DOM render can lag slightly behind this event
   setTimeout(() => { lastChatStr = ''; pushChatHistory(); }, 500);
 });
 
-// Fires on every streamed chunk during generation — debounced instead of
+// Fires on every streamed chunk during generation, debounced instead of
 // pushed on every single token (which can fire many times a second) so
 // players still watch it type live, without pushing far more often than
 // anyone could perceive. Real activity, not a guessed interval, drives
-// the rate — the old flat 700ms poll during generation is gone.
+// the rate: the old flat 700ms poll during generation is gone.
 if (event_types.STREAM_TOKEN_RECEIVED) {
   let streamDebounceTimer = null;
   eventSource.on(event_types.STREAM_TOKEN_RECEIVED, () => {
@@ -1001,7 +1001,7 @@ if (event_types.STREAM_TOKEN_RECEIVED) {
   });
 }
 
-// Fires once ST has actually painted the message into the DOM —
+// Fires once ST has actually painted the message into the DOM:
 // this is when .mes_text has the final rendered HTML available
 if (event_types.CHARACTER_MESSAGE_RENDERED) {
   eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, () => {
@@ -1016,7 +1016,7 @@ if (event_types.USER_MESSAGE_RENDERED) {
   });
 }
 
-// SillyTavern has booted and its character list is loaded — the web client
+// SillyTavern has booted and its character list is loaded, the web client
 // can be given the session info (characters/personas/presets) now, even if no
 // chat is open yet (e.g. keeper's tab sitting at the character-select screen).
 if (event_types.APP_READY) {
@@ -1050,7 +1050,7 @@ if (event_types.PERSONA_CHANGED) {
 // Generation status, visible to every player
 // GENERATION_STARTED's first argument is the generation type. 'quiet' is
 // ST's own background/internal LLM calls (e.g. the Memory extension
-// re-summarizing the chat on load) — not a real reply anyone is waiting
+// re-summarizing the chat on load), not a real reply anyone is waiting
 // on, so it shouldn't show "X is generating…" to every player.
 eventSource.on(event_types.GENERATION_STARTED, (type) => {
   if (type === 'quiet') return;

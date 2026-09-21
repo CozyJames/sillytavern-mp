@@ -28,14 +28,14 @@ const HOST_URL = ST_URL + '#mp_host=1';
 //
 // Watch ONLY folders that change on a deliberate user action (adding/editing a
 // preset, character, or world). Deliberately excludes:
-//   - 'chats'/'group chats' — written on every message during normal play
-//   - 'thumbnails*'          — regenerated image cache, not user-authored
-//   - 'settings.json' + 'QuickReplies' — SillyTavern rewrites these CONSTANTLY on
+//   - 'chats'/'group chats': written on every message during normal play
+//   - 'thumbnails*': regenerated image cache, not user-authored
+//   - 'settings.json' + 'QuickReplies': SillyTavern rewrites these CONSTANTLY on
 //     its own during normal play (token cache, UI state, metadata) with no user
 //     action at all. Watching them reloaded the tab every ~minute mid-session,
 //     which killed live generations and caused phantom re-generations. The
 //     persona list lives in settings.json, so newly-added personas now need the
-//     30-minute timer or a manual `systemctl restart tavern-keeper` to appear —
+//     30-minute timer or a manual `systemctl restart tavern-keeper` to appear,
 //     an acceptable trade for not nuking active play.
 const ST_DATA_PATH = process.env.ST_DATA_PATH || '';
 const WATCHED_SUBPATHS = [
@@ -141,7 +141,7 @@ async function main() {
       console.warn('[keeper] ST_DATA_PATH is set but none of the expected subfolders exist there:', ST_DATA_PATH);
     }
   } else {
-    console.log('[keeper] ST_DATA_PATH not set — relying on the 30-minute timer only, see README');
+    console.log('[keeper] ST_DATA_PATH not set, relying on the 30-minute timer only, see README');
   }
 
   browser.on('disconnected', () => {

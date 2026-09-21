@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# SillyTavern Multiplayer — local installer.
+# SillyTavern Multiplayer: local installer.
 #
 # For running everything on your own machine: SillyTavern, the relay
 # server, and the browser tab all stay yours. No TLS, no login, no
-# headless-browser keeper — you're the one keeping the tab open, so
+# headless-browser keeper: you're the one keeping the tab open, so
 # none of that is needed here. For a VPS/remote setup, use install.sh
 # instead.
 #
@@ -30,10 +30,10 @@ ask()   {
 }
 
 for cmd in node npm git; do
-  command -v "$cmd" >/dev/null 2>&1 || { warn "'$cmd' is required but not found — install it first."; exit 1; }
+  command -v "$cmd" >/dev/null 2>&1 || { warn "'$cmd' is required but not found. Install it first."; exit 1; }
 done
 
-echo "SillyTavern Multiplayer — local install"
+echo "SillyTavern Multiplayer: local install"
 echo "Everything stays on this machine: no TLS, no login, no keeper."
 echo
 
@@ -42,13 +42,13 @@ ST_PATH="$(ask 'Path to your SillyTavern install' "$HOME/SillyTavern")"
 ST_USER="$(ask "SillyTavern user folder (usually default-user)" "default-user")"
 
 if [ ! -d "$ST_PATH/data" ]; then
-  warn "'$ST_PATH/data' doesn't exist — is that really your SillyTavern install path?"
+  warn "'$ST_PATH/data' doesn't exist. Is that really your SillyTavern install path?"
   read -r -p "Continue anyway? [y/N]: " reply
   [[ "$reply" =~ ^[Yy] ]] || exit 1
 fi
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-  info "Found an existing checkout at $INSTALL_DIR — updating it"
+  info "Found an existing checkout at $INSTALL_DIR, updating it"
   git -C "$INSTALL_DIR" pull --ff-only
 else
   info "Cloning into $INSTALL_DIR"
